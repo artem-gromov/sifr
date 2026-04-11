@@ -1,4 +1,4 @@
-use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+use argon2::Argon2;
 use rand::rngs::OsRng;
 use thiserror::Error;
 use zeroize::Zeroizing;

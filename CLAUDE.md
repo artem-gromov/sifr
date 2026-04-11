@@ -68,14 +68,21 @@ SwiftUI full-window app. Key integration points:
 Key = Argon2id(master_password, salt).  
 Salt stored alongside the vault in a `<file>.salt` companion file (16 bytes, not secret).
 
-## Agent workflow
+## Multi-agent system
 
-Main agent (orchestrator) in `main` branch.  
-Worker agents run in isolated `git worktree` branches, implement features, open PRs.  
-Main agent reviews diffs, runs `cargo test --all`, merges or requests changes.
+**Orchestrator** (Opus 4.6) — plans, delegates, reviews PRs, merges. Does not write feature code.  
+**Worker agents** (Sonnet) — implement features in isolated git worktrees.  
+Role definitions: `.claude/agents/`
 
-When starting a new feature as a worker agent:
-1. Work in your assigned worktree branch
-2. Keep commits atomic and descriptive
-3. `cargo fmt --all` and `cargo clippy` must pass before opening a PR
-4. Open PR with `gh pr create` targeting `main`
+| Agent | Scope | Branch prefix |
+|-------|-------|---------------|
+| `core-dev` | `core/` — crypto, DB, models, vault, themes | `core/` |
+| `tui-dev` | `cli/` — Ratatui TUI, UX, keybindings | `tui/` |
+| `security-reviewer` | all (read-only) — audit report, no code | — |
+
+### Dispatch rules
+- Agents are spawned with `model: "sonnet"` and `isolation: "worktree"`
+- Each agent receives ONLY its role file + specific task + relevant code snippets
+- `core-dev` and `tui-dev` can run in parallel when tasks are independent
+- `security-reviewer` runs after implementation, before merge
+- PRs are squash-merged, branches deleted after merge

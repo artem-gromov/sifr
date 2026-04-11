@@ -1,6 +1,5 @@
 use anyhow::Result;
 use rusqlite::Connection;
-use zeroize::Zeroizing;
 
 use crate::crypto;
 use crate::db;
