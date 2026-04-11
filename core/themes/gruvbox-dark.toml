@@ -1,0 +1,24 @@
+name   = "Gruvbox Dark"
+author = "morhetz"
+dark   = true
+
+[palette]
+background = "#282828"
+surface    = "#3c3836"
+overlay    = "#504945"
+
+text    = "#ebdbb2"
+subtext = "#d5c4a1"
+muted   = "#928374"
+
+accent     = "#d79921"
+green      = "#98971a"
+yellow     = "#d79921"
+red        = "#cc241d"
+blue       = "#458588"
+purple     = "#b16286"
+cyan       = "#689d6a"
+
+border     = "#504945"
+selection  = "#504945"
+cursor     = "#ebdbb2"

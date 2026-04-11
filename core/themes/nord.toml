@@ -1,0 +1,24 @@
+name   = "Nord"
+author = "Arctic Ice Studio"
+dark   = true
+
+[palette]
+background = "#2e3440"
+surface    = "#3b4252"
+overlay    = "#434c5e"
+
+text    = "#eceff4"
+subtext = "#e5e9f0"
+muted   = "#4c566a"
+
+accent     = "#88c0d0"
+green      = "#a3be8c"
+yellow     = "#ebcb8b"
+red        = "#bf616a"
+blue       = "#5e81ac"
+purple     = "#b48ead"
+cyan       = "#8fbcbb"
+
+border     = "#434c5e"
+selection  = "#434c5e"
+cursor     = "#eceff4"

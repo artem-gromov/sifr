@@ -1,0 +1,21 @@
+[package]
+name = "sifr"
+description = "Sifr — beautiful TUI password manager"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "sifr"
+path = "src/main.rs"
+
+[dependencies]
+sifr-core = { path = "../core" }
+clap.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+anyhow.workspace = true
+arboard.workspace = true
+tokio.workspace = true

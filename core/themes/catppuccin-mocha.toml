@@ -1,0 +1,24 @@
+name   = "Catppuccin Mocha"
+author = "Catppuccin"
+dark   = true
+
+[palette]
+background = "#1e1e2e"
+surface    = "#313244"
+overlay    = "#45475a"
+
+text    = "#cdd6f4"
+subtext = "#bac2de"
+muted   = "#585b70"
+
+accent     = "#cba6f7"
+green      = "#a6e3a1"
+yellow     = "#f9e2af"
+red        = "#f38ba8"
+blue       = "#89b4fa"
+purple     = "#cba6f7"
+cyan       = "#89dceb"
+
+border     = "#45475a"
+selection  = "#45475a"
+cursor     = "#f5e0dc"

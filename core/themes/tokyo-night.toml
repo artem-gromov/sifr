@@ -1,0 +1,24 @@
+name   = "Tokyo Night"
+author = "enkia"
+dark   = true
+
+[palette]
+background = "#1a1b26"
+surface    = "#24283b"
+overlay    = "#414868"
+
+text    = "#c0caf5"
+subtext = "#a9b1d6"
+muted   = "#565f89"
+
+accent     = "#7aa2f7"
+green      = "#9ece6a"
+yellow     = "#e0af68"
+red        = "#f7768e"
+blue       = "#7aa2f7"
+purple     = "#bb9af7"
+cyan       = "#7dcfff"
+
+border     = "#414868"
+selection  = "#364a82"
+cursor     = "#c0caf5"

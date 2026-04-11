@@ -1,0 +1,13 @@
+/target
+/.DS_Store
+**/.DS_Store
+*.swp
+*.swo
+.env
+.env.local
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM

@@ -1,0 +1,29 @@
+[package]
+name = "sifr-core"
+description = "Sifr core library — encrypted vault, crypto, models"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "sifr_core"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+rusqlite.workspace = true
+argon2.workspace = true
+aes-gcm.workspace = true
+rand.workspace = true
+zeroize.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+totp-rs.workspace = true
+uniffi.workspace = true
+
+[build-dependencies]
+uniffi = { workspace = true, features = ["build"] }
