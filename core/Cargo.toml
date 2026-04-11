@@ -25,5 +25,8 @@ anyhow.workspace = true
 totp-rs.workspace = true
 uniffi.workspace = true
 
+[dev-dependencies]
+tempfile = "3"
+
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }

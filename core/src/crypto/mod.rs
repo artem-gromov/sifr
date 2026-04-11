@@ -28,12 +28,7 @@ pub fn generate_salt() -> [u8; 16] {
 }
 
 /// Generates a random password with given length and character set flags.
-pub fn generate_password(
-    length: usize,
-    uppercase: bool,
-    numbers: bool,
-    symbols: bool,
-) -> String {
+pub fn generate_password(length: usize, uppercase: bool, numbers: bool, symbols: bool) -> String {
     use rand::seq::SliceRandom;
     let mut chars: Vec<char> = ('a'..='z').collect();
     if uppercase {
