@@ -2,7 +2,7 @@
 -- Applied once on vault creation via embedded migration
 
 PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+-- foreign_keys is set in db::open() so it applies on every connection
 
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (

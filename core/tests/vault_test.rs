@@ -1,0 +1,212 @@
+use sifr_core::{EntryUpdate, NewEntry, Vault, VaultError};
+use tempfile::TempDir;
+
+fn temp_vault_path(dir: &TempDir) -> String {
+    dir.path().join("test.vault").to_str().unwrap().to_owned()
+}
+
+// ---------------------------------------------------------------------------
+// Vault lifecycle
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_vault_create_and_open() {
+    let dir = TempDir::new().unwrap();
+    let path = temp_vault_path(&dir);
+
+    // Create vault
+    let vault = Vault::create(&path, "correct-horse-battery-staple").unwrap();
+    // Basic sanity: list entries on fresh vault returns empty vec
+    let entries = vault.list_entries().unwrap();
+    assert!(entries.is_empty());
+    drop(vault);
+
+    // Reopen with same password
+    let vault2 = Vault::open(&path, "correct-horse-battery-staple").unwrap();
+    let entries2 = vault2.list_entries().unwrap();
+    assert!(entries2.is_empty());
+}
+
+#[test]
+fn test_vault_wrong_password() {
+    let dir = TempDir::new().unwrap();
+    let path = temp_vault_path(&dir);
+
+    Vault::create(&path, "right-password").unwrap();
+
+    let result = Vault::open(&path, "wrong-password");
+    assert!(
+        matches!(result, Err(VaultError::WrongPassword)),
+        "Expected WrongPassword, got {:?}",
+        result
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Entry CRUD
+// ---------------------------------------------------------------------------
+
+fn make_vault(dir: &TempDir) -> Vault {
+    let path = temp_vault_path(dir);
+    Vault::create(&path, "test-password").unwrap()
+}
+
+#[test]
+fn test_entry_crud() {
+    let dir = TempDir::new().unwrap();
+    let vault = make_vault(&dir);
+
+    // Add
+    let entry = vault
+        .add_entry(&NewEntry {
+            title: "GitHub".into(),
+            username: Some("alice".into()),
+            password: Some("s3cr3t".into()),
+            url: Some("https://github.com".into()),
+            notes: Some("work account".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(entry.title, "GitHub");
+    assert_eq!(entry.username.as_deref(), Some("alice"));
+    assert_eq!(entry.password.as_deref(), Some("s3cr3t"));
+    assert!(!entry.favorite);
+    let id = entry.id;
+
+    // Get
+    let fetched = vault.get_entry(id).unwrap();
+    assert_eq!(fetched.id, id);
+    assert_eq!(fetched.title, "GitHub");
+
+    // List
+    let list = vault.list_entries().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, id);
+
+    // Update
+    let updated = vault
+        .update_entry(
+            id,
+            EntryUpdate {
+                title: Some("GitHub (work)".into()),
+                favorite: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.title, "GitHub (work)");
+    assert!(updated.favorite);
+    // Password unchanged
+    assert_eq!(updated.password.as_deref(), Some("s3cr3t"));
+
+    // Delete
+    vault.delete_entry(id).unwrap();
+    let list_after = vault.list_entries().unwrap();
+    assert!(list_after.is_empty());
+
+    // Get after delete should return EntryNotFound
+    let result = vault.get_entry(id);
+    assert!(
+        matches!(result, Err(VaultError::EntryNotFound(_))),
+        "Expected EntryNotFound, got {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_delete_nonexistent_entry() {
+    let dir = TempDir::new().unwrap();
+    let vault = make_vault(&dir);
+    let result = vault.delete_entry(9999);
+    assert!(matches!(result, Err(VaultError::EntryNotFound(9999))));
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_entry_search() {
+    let dir = TempDir::new().unwrap();
+    let vault = make_vault(&dir);
+
+    vault
+        .add_entry(&NewEntry {
+            title: "GitHub".into(),
+            username: Some("alice".into()),
+            password: Some("pw1".into()),
+            url: Some("https://github.com".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    vault
+        .add_entry(&NewEntry {
+            title: "GitLab".into(),
+            username: Some("alice".into()),
+            password: Some("pw2".into()),
+            url: Some("https://gitlab.com".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    vault
+        .add_entry(&NewEntry {
+            title: "AWS Console".into(),
+            username: Some("ops@example.com".into()),
+            password: Some("pw3".into()),
+            url: Some("https://aws.amazon.com".into()),
+            notes: Some("production account".into()),
+            ..Default::default()
+        })
+        .unwrap();
+
+    // Search by title prefix
+    let git_results = vault.search_entries("git").unwrap();
+    assert_eq!(git_results.len(), 2);
+
+    // Search by URL fragment
+    let aws_results = vault.search_entries("amazon").unwrap();
+    assert_eq!(aws_results.len(), 1);
+    assert_eq!(aws_results[0].title, "AWS Console");
+
+    // Search by notes
+    let prod_results = vault.search_entries("production").unwrap();
+    assert_eq!(prod_results.len(), 1);
+
+    // Search with no matches
+    let none_results = vault.search_entries("zzz-no-match").unwrap();
+    assert!(none_results.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Password generator
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_password_generator() {
+    use sifr_core::crypto::generate_password;
+
+    // Length check
+    let pw = generate_password(20, true, true, true);
+    assert_eq!(pw.len(), 20);
+
+    // Lowercase only
+    let pw_lower = generate_password(50, false, false, false);
+    assert!(pw_lower.chars().all(|c| c.is_ascii_lowercase()));
+
+    // With uppercase: at least some uppercase expected over 100 chars
+    let pw_upper = generate_password(100, true, false, false);
+    assert!(pw_upper.chars().any(|c| c.is_ascii_uppercase()));
+
+    // With numbers
+    let pw_num = generate_password(100, false, true, false);
+    assert!(pw_num.chars().any(|c| c.is_ascii_digit()));
+
+    // With symbols
+    let symbols = "!@#$%^&*()-_=+[]{}|;:,.<>?";
+    let pw_sym = generate_password(100, false, false, true);
+    assert!(pw_sym.chars().any(|c| symbols.contains(c)));
+
+    // Minimum length 1
+    let pw_one = generate_password(1, false, false, false);
+    assert_eq!(pw_one.len(), 1);
+}

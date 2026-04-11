@@ -4,4 +4,5 @@ pub mod models;
 pub mod theme;
 pub mod vault;
 
-pub use vault::Vault;
+pub use models::{Entry, EntryUpdate, NewEntry};
+pub use vault::{Vault, VaultError};

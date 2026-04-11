@@ -1,21 +1,28 @@
-use anyhow::Result;
 use rusqlite::Connection;
+use thiserror::Error;
 use zeroize::Zeroizing;
 
 const SCHEMA: &str = include_str!("schema.sql");
 
+#[derive(Error, Debug)]
+pub enum DbError {
+    #[error("Database error: {0}")]
+    Rusqlite(#[from] rusqlite::Error),
+}
+
 /// Opens (or creates) an encrypted SQLCipher vault file.
 /// The key is derived externally via `crypto::derive_key` and passed as hex.
-pub fn open(path: &str, key: &Zeroizing<[u8; 32]>) -> Result<Connection> {
+pub fn open(path: &str, key: &Zeroizing<[u8; 32]>) -> Result<Connection, DbError> {
     let conn = Connection::open(path)?;
     let hex_key = hex_key(key);
     conn.execute_batch(&format!("PRAGMA key = \"x'{}'\"", hex_key))?;
     conn.execute_batch("PRAGMA cipher_page_size = 4096;")?;
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     Ok(conn)
 }
 
 /// Initialises schema on a freshly created vault.
-pub fn init_schema(conn: &Connection) -> Result<()> {
+pub fn init_schema(conn: &Connection) -> Result<(), DbError> {
     conn.execute_batch(SCHEMA)?;
     Ok(())
 }

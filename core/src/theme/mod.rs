@@ -28,13 +28,13 @@ pub struct Palette {
     pub muted: Color,
 
     // Accent colors
-    pub accent: Color,       // primary highlight
-    pub green: Color,        // success / strength-high
-    pub yellow: Color,       // warning / strength-medium
-    pub red: Color,          // error / strength-low / danger
-    pub blue: Color,         // info / links
-    pub purple: Color,       // TOTP / special
-    pub cyan: Color,         // secondary accent
+    pub accent: Color, // primary highlight
+    pub green: Color,  // success / strength-high
+    pub yellow: Color, // warning / strength-medium
+    pub red: Color,    // error / strength-low / danger
+    pub blue: Color,   // info / links
+    pub purple: Color, // TOTP / special
+    pub cyan: Color,   // secondary accent
 
     // UI chrome
     pub border: Color,
@@ -74,13 +74,25 @@ impl ThemeRegistry {
 
     fn load_bundled(&mut self) {
         let bundled: &[(&str, &str)] = &[
-            ("dracula",        include_str!("../../themes/dracula.toml")),
-            ("solarized-dark", include_str!("../../themes/solarized-dark.toml")),
-            ("solarized-light",include_str!("../../themes/solarized-light.toml")),
-            ("nord",           include_str!("../../themes/nord.toml")),
-            ("catppuccin-mocha", include_str!("../../themes/catppuccin-mocha.toml")),
-            ("gruvbox-dark",   include_str!("../../themes/gruvbox-dark.toml")),
-            ("tokyo-night",    include_str!("../../themes/tokyo-night.toml")),
+            ("dracula", include_str!("../../themes/dracula.toml")),
+            (
+                "solarized-dark",
+                include_str!("../../themes/solarized-dark.toml"),
+            ),
+            (
+                "solarized-light",
+                include_str!("../../themes/solarized-light.toml"),
+            ),
+            ("nord", include_str!("../../themes/nord.toml")),
+            (
+                "catppuccin-mocha",
+                include_str!("../../themes/catppuccin-mocha.toml"),
+            ),
+            (
+                "gruvbox-dark",
+                include_str!("../../themes/gruvbox-dark.toml"),
+            ),
+            ("tokyo-night", include_str!("../../themes/tokyo-night.toml")),
         ];
         for (id, src) in bundled {
             if let Ok(t) = Theme::from_toml(src) {
@@ -90,7 +102,9 @@ impl ThemeRegistry {
     }
 
     pub fn get(&self, id: &str) -> Result<&Theme, ThemeError> {
-        self.themes.get(id).ok_or_else(|| ThemeError::NotFound(id.into()))
+        self.themes
+            .get(id)
+            .ok_or_else(|| ThemeError::NotFound(id.into()))
     }
 
     pub fn active(&self) -> &Theme {
@@ -114,14 +128,16 @@ impl ThemeRegistry {
 
     /// Load a user-supplied theme from a TOML file and register it.
     pub fn load_file(&mut self, path: &str) -> Result<(), ThemeError> {
-        let src = std::fs::read_to_string(path)
-            .map_err(|e| ThemeError::Parse(e.to_string()))?;
+        let src = std::fs::read_to_string(path).map_err(|e| ThemeError::Parse(e.to_string()))?;
         let theme = Theme::from_toml(&src)?;
-        self.themes.insert(theme.name.to_lowercase().replace(' ', "-"), theme);
+        self.themes
+            .insert(theme.name.to_lowercase().replace(' ', "-"), theme);
         Ok(())
     }
 }
 
 impl Default for ThemeRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
