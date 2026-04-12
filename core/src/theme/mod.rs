@@ -66,7 +66,7 @@ impl ThemeRegistry {
     pub fn new() -> Self {
         let mut r = Self {
             themes: HashMap::new(),
-            active: "dracula".into(),
+            active: String::new(),
         };
         r.load_bundled();
         r
@@ -107,8 +107,17 @@ impl ThemeRegistry {
             .ok_or_else(|| ThemeError::NotFound(id.into()))
     }
 
-    pub fn active(&self) -> &Theme {
-        self.themes.get(&self.active).unwrap()
+    pub fn active(&self) -> Option<&Theme> {
+        if self.active.is_empty() {
+            None
+        } else {
+            self.themes.get(&self.active)
+        }
+    }
+
+    /// Sets active to empty string, meaning "no theme / terminal native".
+    pub fn clear_active(&mut self) {
+        self.active = String::new();
     }
 
     pub fn set_active(&mut self, id: &str) -> Result<(), ThemeError> {

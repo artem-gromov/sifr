@@ -1,5 +1,7 @@
 use sifr_core::theme::ThemeRegistry;
 
+use crate::theme_bridge::ThemeBridge;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
     Unlock,
@@ -113,11 +115,36 @@ impl App {
         }
     }
 
+    /// Returns the appropriate `ThemeBridge` for the current theme state.
+    /// When no theme is active, returns a terminal-native bridge (all `Style::default()`).
+    pub fn theme_bridge(&self) -> ThemeBridge<'_> {
+        match self.theme.active() {
+            Some(t) => ThemeBridge::new(&t.palette),
+            None => ThemeBridge::terminal(),
+        }
+    }
+
+    /// Cycles: None → first theme → ... → last theme → None.
     pub fn cycle_theme(&mut self) {
         let themes: Vec<String> = self.theme.list().iter().map(|s| s.to_string()).collect();
-        let active = self.theme.active().name.to_lowercase().replace(' ', "-");
-        let pos = themes.iter().position(|t| t == &active).unwrap_or(0);
-        let next = &themes[(pos + 1) % themes.len()];
-        let _ = self.theme.set_active(next);
+        match self.theme.active() {
+            None => {
+                // Move to first theme
+                if let Some(first) = themes.first() {
+                    let _ = self.theme.set_active(first);
+                }
+            }
+            Some(current) => {
+                let active_key = current.name.to_lowercase().replace(' ', "-");
+                let pos = themes.iter().position(|t| t == &active_key).unwrap_or(0);
+                if pos + 1 >= themes.len() {
+                    // Wrap back to terminal native
+                    self.theme.clear_active();
+                } else {
+                    let next = &themes[pos + 1];
+                    let _ = self.theme.set_active(next);
+                }
+            }
+        }
     }
 }

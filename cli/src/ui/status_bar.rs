@@ -5,12 +5,14 @@ use ratatui::{
     Frame,
 };
 
-use crate::{app::App, theme_bridge::ThemeBridge};
+use crate::app::App;
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
-    let palette = &app.theme.active().palette;
-    let tb = ThemeBridge::new(palette);
-    let theme_name = &app.theme.active().name;
+    let tb = app.theme_bridge();
+    let theme_name = match app.theme.active() {
+        Some(t) => t.name.clone(),
+        None => "Terminal".to_string(),
+    };
     let entry_count = app.filtered_entries().len();
 
     let lock_status = Span::styled(" unlocked", tb.green());

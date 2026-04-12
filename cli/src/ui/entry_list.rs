@@ -8,8 +8,7 @@ use ratatui::{
 use crate::{app::App, theme_bridge::ThemeBridge};
 
 pub fn draw(f: &mut Frame, app: &App) {
-    let palette = &app.theme.active().palette;
-    let tb = ThemeBridge::new(palette);
+    let tb = app.theme_bridge();
 
     let full = f.size();
     let bg = Block::default().style(tb.bg());
@@ -32,7 +31,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     crate::ui::status_bar::draw(f, app, chunks[3]);
 }
 
-fn draw_search_bar(f: &mut Frame, app: &App, tb: &ThemeBridge, area: Rect) {
+fn draw_search_bar(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
     let query = &app.search_query;
     let vault_name = std::path::Path::new(&app.vault_path)
         .file_name()
@@ -65,7 +64,7 @@ fn draw_search_bar(f: &mut Frame, app: &App, tb: &ThemeBridge, area: Rect) {
     f.render_widget(para, area);
 }
 
-fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge, area: Rect) {
+fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
     let entries = app.filtered_entries();
 
     let rows: Vec<Row> = entries
@@ -122,7 +121,7 @@ fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge, area: Rect) {
     f.render_stateful_widget(table, area, &mut state);
 }
 
-fn draw_hints(f: &mut Frame, _app: &App, tb: &ThemeBridge, area: Rect) {
+fn draw_hints(f: &mut Frame, _app: &App, tb: &ThemeBridge<'_>, area: Rect) {
     let hints = vec![Line::from(vec![
         Span::styled(" jk", tb.accent()),
         Span::styled(" navigate", tb.muted()),
