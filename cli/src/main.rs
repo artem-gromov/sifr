@@ -79,7 +79,7 @@ fn main() -> Result<()> {
                 !no_numbers,
                 !no_symbols,
             );
-            println!("{password}");
+            println!("{}", &*password);
         }
     }
 
