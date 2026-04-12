@@ -37,7 +37,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         Line::from(Span::styled("  Master Password:", tb.text())),
         Line::from(Span::styled(format!("  {}", input_line), tb.accent())),
         Line::from(""),
-        Line::from(Span::styled("  Enter unlock  q quit", tb.muted())),
+        Line::from(Span::styled("  Enter unlock  Esc quit", tb.muted())),
         Line::from(""),
     ];
 
