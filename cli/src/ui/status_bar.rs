@@ -10,15 +10,30 @@ use crate::app::App;
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let tb = app.theme_bridge();
 
-    // Show clipboard notification when active
+    // Show clipboard countdown when active
+    if let Some(clear_at) = app.clipboard_clear_at {
+        let now = std::time::Instant::now();
+        if now < clear_at {
+            let remaining = (clear_at - now).as_secs();
+            let msg = format!(" Copied! Clears in {}s ", remaining);
+            let line = Line::from(Span::styled(msg, tb.accent()));
+            let bar = Paragraph::new(line).style(tb.status_bar());
+            f.render_widget(bar, area);
+            return;
+        }
+    }
+
+    // Show error notification (e.g., "Clipboard unavailable")
     if let Some(ref notification) = app.clipboard_notification {
-        let line = Line::from(vec![
-            Span::styled(" ", tb.status_bar()),
-            Span::styled(notification.clone(), tb.accent()),
-        ]);
-        let bar = Paragraph::new(line).style(tb.status_bar());
-        f.render_widget(bar, area);
-        return;
+        if app.clipboard_clear_at.is_none() {
+            let line = Line::from(vec![
+                Span::styled(" ", tb.status_bar()),
+                Span::styled(notification.clone(), tb.accent()),
+            ]);
+            let bar = Paragraph::new(line).style(tb.status_bar());
+            f.render_widget(bar, area);
+            return;
+        }
     }
 
     let theme_name = match app.theme.active() {

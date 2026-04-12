@@ -5,16 +5,17 @@ use ratatui::{
     Frame,
 };
 
-use crate::{app::App, theme_bridge::ThemeBridge};
+use crate::app::App;
 
-pub fn draw(f: &mut Frame, app: &App) {
-    let tb = app.theme_bridge();
-
+pub fn draw(f: &mut Frame, app: &mut App) {
     let full = f.size();
-    let bg = Block::default().style(tb.bg());
-    f.render_widget(bg, full);
+    {
+        let tb = app.theme_bridge();
+        let bg = Block::default().style(tb.bg());
+        f.render_widget(bg, full);
+    }
 
-    // Layout: header + search + table + hint + status
+    // Layout: search bar + table + hint + status
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -25,13 +26,14 @@ pub fn draw(f: &mut Frame, app: &App) {
         ])
         .split(full);
 
-    draw_search_bar(f, app, &tb, chunks[0]);
-    draw_table(f, app, &tb, chunks[1]);
-    draw_hints(f, app, &tb, chunks[2]);
+    draw_search_bar(f, app, chunks[0]);
+    draw_table(f, app, chunks[1]);
+    draw_hints(f, app, chunks[2]);
     crate::ui::status_bar::draw(f, app, chunks[3]);
 }
 
-fn draw_search_bar(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
+fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
+    let tb = app.theme_bridge();
     let query = &app.search_query;
     let vault_name = std::path::Path::new(&app.vault_path)
         .file_name()
@@ -64,7 +66,22 @@ fn draw_search_bar(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
     f.render_widget(para, area);
 }
 
-fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
+fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
+    // Compute column boundaries for double-click detection BEFORE borrowing app
+    let border_x = area.x + 1;
+    let available = area.width.saturating_sub(2);
+    let fixed: u16 = 2 + 20 + 10 + 22 + 10;
+    let username_w = available.saturating_sub(fixed).max(16);
+    app.column_boundaries = vec![
+        border_x,
+        border_x + 2,
+        border_x + 2 + 20,
+        border_x + 2 + 20 + username_w,
+        border_x + 2 + 20 + username_w + 10,
+        border_x + 2 + 20 + username_w + 10 + 22,
+    ];
+
+    let tb = app.theme_bridge();
     let entries = app.filtered_entries();
 
     let rows: Vec<Row> = entries
@@ -75,8 +92,12 @@ fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
             let cells = vec![
                 Cell::from(Span::styled(marker, tb.accent())),
                 Cell::from(Span::styled(e.title.clone(), tb.text())),
-                Cell::from(Span::styled(e.url.clone(), tb.subtext())),
                 Cell::from(Span::styled(e.username.clone(), tb.muted())),
+                Cell::from(Span::styled(
+                    "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
+                    tb.subtext(),
+                )),
+                Cell::from(Span::styled(e.url.clone(), tb.subtext())),
                 Cell::from(Span::styled(e.category.clone(), tb.blue())),
             ];
             let style = if i == app.selected_index {
@@ -89,18 +110,20 @@ fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
         .collect();
 
     let widths = [
-        Constraint::Length(2),
-        Constraint::Length(20),
-        Constraint::Length(22),
-        Constraint::Min(20),
-        Constraint::Length(10),
+        Constraint::Length(2),  // Marker
+        Constraint::Length(20), // Title
+        Constraint::Min(16),    // Username (flexible)
+        Constraint::Length(10), // Password
+        Constraint::Length(22), // URL
+        Constraint::Length(10), // Category
     ];
 
     let header = Row::new(vec![
         Cell::from(""),
         Cell::from(Span::styled("Title", tb.accent())),
-        Cell::from(Span::styled("URL", tb.accent())),
         Cell::from(Span::styled("Username", tb.accent())),
+        Cell::from(Span::styled("Password", tb.accent())),
+        Cell::from(Span::styled("URL", tb.accent())),
         Cell::from(Span::styled("Category", tb.accent())),
     ])
     .style(tb.surface());
@@ -121,14 +144,17 @@ fn draw_table(f: &mut Frame, app: &App, tb: &ThemeBridge<'_>, area: Rect) {
     f.render_stateful_widget(table, area, &mut state);
 }
 
-fn draw_hints(f: &mut Frame, _app: &App, tb: &ThemeBridge<'_>, area: Rect) {
+fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
+    let tb = app.theme_bridge();
     let hints = vec![Line::from(vec![
         Span::styled(" jk", tb.accent()),
-        Span::styled(" navigate", tb.muted()),
+        Span::styled(" nav", tb.muted()),
         Span::styled("  Enter", tb.accent()),
         Span::styled(" view", tb.muted()),
-        Span::styled("  a", tb.accent()),
-        Span::styled(" add", tb.muted()),
+        Span::styled("  y/c", tb.accent()),
+        Span::styled(" copy pw", tb.muted()),
+        Span::styled("  u", tb.accent()),
+        Span::styled(" copy user", tb.muted()),
         Span::styled("  /", tb.accent()),
         Span::styled(" search", tb.muted()),
         Span::styled("  t", tb.accent()),

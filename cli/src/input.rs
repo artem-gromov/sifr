@@ -40,8 +40,6 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
         MouseEventKind::Down(MouseButton::Left) => {
             match app.screen {
                 Screen::VaultPicker => {
-                    // Title bar is 3 rows tall; hints at bottom is 2 rows.
-                    // List starts at row 3 (0-indexed). Inner area starts at row 4 (inside border).
                     let row = mouse.row as usize;
                     if row >= 4 {
                         let index = app.picker_scroll_offset + (row - 4);
@@ -51,13 +49,58 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     }
                 }
                 Screen::EntryList => {
-                    // Layout: row 0-2 = search bar (3 rows), row 3 = table header, row 4+ = entries
+                    // Layout: row 0-2 = search bar, row 3 = table header, row 4+ = entries
                     let row = mouse.row as usize;
+                    let col = mouse.column;
                     if row >= 4 {
                         let index = row - 4;
                         let count = app.filtered_entries().len();
                         if count > 0 && index < count {
                             app.selected_index = index;
+
+                            // Double-click detection
+                            let now = std::time::Instant::now();
+                            let is_double =
+                                if let Some((last_time, last_col, last_row)) = app.last_click {
+                                    let elapsed = now.duration_since(last_time);
+                                    elapsed.as_millis() < 500
+                                        && last_row == mouse.row
+                                        && (last_col as i32 - col as i32).unsigned_abs() < 3
+                                } else {
+                                    false
+                                };
+
+                            if is_double {
+                                let clicked_col = determine_column(col, &app.column_boundaries);
+                                match clicked_col {
+                                    1 => {
+                                        // Title → open detail
+                                        app.screen = Screen::EntryDetail;
+                                    }
+                                    2 => {
+                                        // Username → copy
+                                        if let Some(e) =
+                                            app.filtered_entries().get(app.selected_index)
+                                        {
+                                            let username = e.username.clone();
+                                            app.copy_to_clipboard(&username);
+                                        }
+                                    }
+                                    3 => {
+                                        // Password → copy
+                                        if let Some(e) =
+                                            app.filtered_entries().get(app.selected_index)
+                                        {
+                                            let password = e.password.clone();
+                                            app.copy_to_clipboard(&password);
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                                app.last_click = None;
+                            } else {
+                                app.last_click = Some((now, col, mouse.row));
+                            }
                         }
                     }
                 }
@@ -72,10 +115,19 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
     }
 }
 
+/// Determines which column index x falls into based on column boundaries.
+fn determine_column(x: u16, boundaries: &[u16]) -> usize {
+    for i in (0..boundaries.len()).rev() {
+        if x >= boundaries[i] {
+            return i;
+        }
+    }
+    0
+}
+
 fn picker_move_up(app: &mut App) {
     if app.picker_selected > 0 {
         app.picker_selected -= 1;
-        // Adjust scroll so selection stays visible
         if app.picker_selected < app.picker_scroll_offset {
             app.picker_scroll_offset = app.picker_selected;
         }
@@ -86,8 +138,6 @@ fn picker_move_down(app: &mut App) {
     let count = app.picker_entries.len();
     if count > 0 && app.picker_selected + 1 < count {
         app.picker_selected += 1;
-        // Adjust scroll — assume a reasonable visible window
-        // We use 20 as VISIBLE_ROWS to match the UI constant
         let visible = 20usize;
         if app.picker_selected >= app.picker_scroll_offset + visible {
             app.picker_scroll_offset = app.picker_selected.saturating_sub(visible - 1);
@@ -107,8 +157,6 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
             app.picker_enter();
         }
         KeyCode::Char('n') => {
-            // Create a new vault named "new.sifr" in the current picker dir
-            // (simple placeholder: sets path and goes to Unlock where user sets password)
             let vault_path = app.picker_path.join("new.sifr");
             app.vault_path = vault_path.to_string_lossy().to_string();
             app.screen = Screen::Unlock;
@@ -141,11 +189,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
             app.screen = Screen::EntryList;
             zeroize::Zeroize::zeroize(&mut app.password_input);
         }
-        KeyCode::Char('q') if app.password_input.is_empty() => {
-            app.running = false;
-        }
         KeyCode::Char(c) => {
-            // Ctrl+C always quits
             if key.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' {
                 app.running = false;
             } else {
@@ -220,6 +264,18 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
         KeyCode::Char('t') => {
             app.cycle_theme();
         }
+        KeyCode::Char('y') => {
+            if let Some(e) = app.filtered_entries().get(app.selected_index) {
+                let password = e.password.clone();
+                app.copy_to_clipboard(&password);
+            }
+        }
+        KeyCode::Char('u') => {
+            if let Some(e) = app.filtered_entries().get(app.selected_index) {
+                let username = e.username.clone();
+                app.copy_to_clipboard(&username);
+            }
+        }
         _ => {}
     }
 }
@@ -233,8 +289,9 @@ fn handle_entry_detail(app: &mut App, key: KeyEvent) {
             app.running = false;
         }
         KeyCode::Char('y') | KeyCode::Char('c') => {
-            if app.filtered_entries().get(app.selected_index).is_some() {
-                app.copy_to_clipboard("**********"); // mock password
+            if let Some(e) = app.filtered_entries().get(app.selected_index) {
+                let password = e.password.clone();
+                app.copy_to_clipboard(&password);
             }
         }
         KeyCode::Char('u') => {
