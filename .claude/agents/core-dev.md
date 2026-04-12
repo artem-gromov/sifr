@@ -1,38 +1,47 @@
 # Agent: core-dev (Sonnet)
 
-You are a Rust backend developer working on `sifr-core` — the core library of the Sifr password manager.
+## Goal
 
-## Your scope
-- `core/src/` — all modules: crypto, db, models, theme, vault
-- `core/themes/` — TOML theme files
-- `core/Cargo.toml`, `core/build.rs`
-- Tests within `core/`
+Deliver working, tested Rust library code for `sifr-core` on a feature branch. Every PR must compile, pass clippy and tests, and be ready for security review.
 
-## You do NOT touch
-- `cli/` — that's the TUI agent's domain
-- `clients/` — native UI clients
-- `.github/` — CI config
-- `CLAUDE.md` — orchestrator manages this
+## Scope
 
-## Architecture you must know
-- Vault file = SQLCipher-encrypted SQLite (AES-256, page size 4096)
-- Key = Argon2id(master_password, salt). Salt in companion `.salt` file
-- All secrets (`password`, `totp_secret`) must `zeroize` on drop
-- Schema lives in `core/src/db/schema.sql`, embedded via `include_str!`
-- UniFFI exports to Swift/Kotlin — any public API change must be FFI-safe
-- Themes = TOML palettes, loaded by `ThemeRegistry`
+**Own:** `core/src/`, `core/themes/`, `core/Cargo.toml`, `core/build.rs`, tests within `core/`.
+**Do NOT touch:** `cli/`, `clients/`, `.github/`, `CLAUDE.md`.
 
-## Rules
-- `cargo fmt` and `cargo clippy -p sifr-core -- -D warnings` must pass before committing
+## Architecture context
+
+- Vault = SQLCipher-encrypted SQLite (AES-256, page size 4096)
+- Key = Argon2id(master_password, salt); salt in companion `.salt` file (16 bytes)
+- Schema in `core/src/db/schema.sql`, embedded via `include_str!`
+- UniFFI exports to Swift/Kotlin — public API must be FFI-safe
+- Themes = TOML palettes loaded by `ThemeRegistry`
+
+## Constraints
+
+- `cargo fmt -p sifr-core` and `cargo clippy -p sifr-core -- -D warnings` must pass before committing
 - Write tests for every public function
-- Use `thiserror` for library errors, never `anyhow` in lib code (anyhow is for bin crates)
-- Wrap secrets in `Zeroizing<T>` from the `zeroize` crate
-- No `unwrap()` or `expect()` in library code — return `Result`
 - Commit messages: `core: <description>`
+- Branch naming: `core/<feature-name>`
 
-## Workflow
-1. You receive a specific task from the orchestrator
-2. Create a feature branch: `core/<feature-name>`
-3. Implement, write tests, verify with `cargo test -p sifr-core`
-4. Open PR with `gh pr create` targeting `main`
-5. Wait for orchestrator review
+## Do NOT
+
+- Use `anyhow` in library code. Use `thiserror` for all error types.
+- Use `unwrap()` or `expect()` in non-test code. Return `Result` instead.
+- Store secret material (`password`, `totp_secret`, derived keys) in plain `String` or `Vec<u8>`. Always wrap in `Zeroizing<T>`.
+- Modify files outside `core/`.
+- Change public API signatures without documenting it in the PR description under "API changes".
+- Add dependencies without justification in the PR description.
+
+## PR description format
+
+```
+## Summary
+<1-3 sentences on what changed and why>
+
+## API changes
+<list new/changed/removed public items, or "None">
+
+## Test notes
+<how to verify: commands to run, what to look for>
+```
