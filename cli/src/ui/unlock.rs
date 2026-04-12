@@ -5,11 +5,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::{app::App, theme_bridge::ThemeBridge};
+use crate::app::App;
 
 pub fn draw(f: &mut Frame, app: &App) {
-    let palette = &app.theme.active().palette;
-    let tb = ThemeBridge::new(palette);
+    let tb = app.theme_bridge();
 
     // Full screen background
     let full = f.size();

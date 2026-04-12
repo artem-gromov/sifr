@@ -12,81 +12,140 @@ fn hex_to_rgb(hex: &str) -> Color {
     Color::Rgb(r, g, b)
 }
 
+/// A bridge between a `sifr-core` `Palette` and Ratatui `Style` values.
+///
+/// When constructed with `ThemeBridge::terminal()` (i.e. `palette` is `None`),
+/// every method returns `Style::default()` so the terminal's own colors show
+/// through.  A few methods add modifiers (Bold, Reversed) so that UI elements
+/// like titles and selections remain visually distinct even without explicit
+/// colors.
 #[allow(dead_code)]
 pub struct ThemeBridge<'a> {
-    pub palette: &'a Palette,
+    palette: Option<&'a Palette>,
 }
 
 #[allow(dead_code)]
 impl<'a> ThemeBridge<'a> {
     pub fn new(palette: &'a Palette) -> Self {
-        Self { palette }
+        Self {
+            palette: Some(palette),
+        }
+    }
+
+    /// Terminal-native mode: no colors imposed, terminal theme shows through.
+    pub fn terminal() -> Self {
+        Self { palette: None }
     }
 
     pub fn bg(&self) -> Style {
-        Style::default().bg(hex_to_rgb(&self.palette.background))
+        match self.palette {
+            Some(p) => Style::default().bg(hex_to_rgb(&p.background)),
+            None => Style::default(),
+        }
     }
 
     pub fn surface(&self) -> Style {
-        Style::default().bg(hex_to_rgb(&self.palette.surface))
+        match self.palette {
+            Some(p) => Style::default().bg(hex_to_rgb(&p.surface)),
+            None => Style::default(),
+        }
     }
 
     pub fn text(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.text))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.text)),
+            None => Style::default(),
+        }
     }
 
     pub fn subtext(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.subtext))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.subtext)),
+            None => Style::default(),
+        }
     }
 
     pub fn muted(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.muted))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.muted)),
+            None => Style::default(),
+        }
     }
 
     pub fn accent(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.accent))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.accent)),
+            None => Style::default(),
+        }
     }
 
     pub fn green(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.green))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.green)),
+            None => Style::default(),
+        }
     }
 
     pub fn red(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.red))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.red)),
+            None => Style::default(),
+        }
     }
 
     pub fn yellow(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.yellow))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.yellow)),
+            None => Style::default(),
+        }
     }
 
     pub fn blue(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.blue))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.blue)),
+            None => Style::default(),
+        }
     }
 
     pub fn purple(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.purple))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.purple)),
+            None => Style::default(),
+        }
     }
 
     pub fn border(&self) -> Style {
-        Style::default().fg(hex_to_rgb(&self.palette.border))
+        match self.palette {
+            Some(p) => Style::default().fg(hex_to_rgb(&p.border)),
+            None => Style::default(),
+        }
     }
 
     pub fn selection(&self) -> Style {
-        Style::default()
-            .bg(hex_to_rgb(&self.palette.selection))
-            .fg(hex_to_rgb(&self.palette.text))
-            .add_modifier(Modifier::BOLD)
+        match self.palette {
+            Some(p) => Style::default()
+                .bg(hex_to_rgb(&p.selection))
+                .fg(hex_to_rgb(&p.text))
+                .add_modifier(Modifier::BOLD),
+            None => Style::default().add_modifier(Modifier::REVERSED),
+        }
     }
 
     pub fn title(&self) -> Style {
-        Style::default()
-            .fg(hex_to_rgb(&self.palette.accent))
-            .add_modifier(Modifier::BOLD)
+        match self.palette {
+            Some(p) => Style::default()
+                .fg(hex_to_rgb(&p.accent))
+                .add_modifier(Modifier::BOLD),
+            None => Style::default().add_modifier(Modifier::BOLD),
+        }
     }
 
     pub fn status_bar(&self) -> Style {
-        Style::default()
-            .bg(hex_to_rgb(&self.palette.surface))
-            .fg(hex_to_rgb(&self.palette.subtext))
+        match self.palette {
+            Some(p) => Style::default()
+                .bg(hex_to_rgb(&p.surface))
+                .fg(hex_to_rgb(&p.subtext)),
+            None => Style::default(),
+        }
     }
 }

@@ -9,10 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{
-    app::{App, Screen},
-    theme_bridge::ThemeBridge,
-};
+use crate::app::{App, Screen};
 
 pub fn draw(f: &mut Frame, app: &App) {
     match app.screen {
@@ -24,8 +21,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 fn draw_entry_detail(f: &mut Frame, app: &App) {
-    let palette = &app.theme.active().palette;
-    let tb = ThemeBridge::new(palette);
+    let tb = app.theme_bridge();
     let full = f.size();
 
     let bg = Block::default().style(tb.bg());
@@ -81,8 +77,7 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
 }
 
 fn draw_help(f: &mut Frame, app: &App) {
-    let palette = &app.theme.active().palette;
-    let tb = ThemeBridge::new(palette);
+    let tb = app.theme_bridge();
     let full = f.size();
 
     let bg = Block::default().style(tb.bg());
