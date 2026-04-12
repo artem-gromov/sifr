@@ -1,6 +1,7 @@
 pub mod entry_list;
 pub mod status_bar;
 pub mod unlock;
+pub mod vault_picker;
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
@@ -13,6 +14,7 @@ use crate::app::{App, Screen};
 
 pub fn draw(f: &mut Frame, app: &App) {
     match app.screen {
+        Screen::VaultPicker => vault_picker::draw(f, app),
         Screen::Unlock => unlock::draw(f, app),
         Screen::EntryList => entry_list::draw(f, app),
         Screen::EntryDetail => draw_entry_detail(f, app),

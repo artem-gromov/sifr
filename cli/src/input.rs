@@ -4,6 +4,7 @@ use crate::app::{App, Screen};
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     match app.screen {
+        Screen::VaultPicker => handle_vault_picker(app, key),
         Screen::Unlock => handle_unlock(app, key),
         Screen::EntryList => handle_entry_list(app, key),
         Screen::EntryDetail => handle_entry_detail(app, key),
@@ -13,23 +14,42 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
 
 pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
     match mouse.kind {
-        MouseEventKind::ScrollUp => {
-            // Same as `k`: move selection up on EntryList
-            if app.screen == Screen::EntryList && app.selected_index > 0 {
-                app.selected_index -= 1;
+        MouseEventKind::ScrollUp => match app.screen {
+            Screen::VaultPicker => {
+                picker_move_up(app);
             }
-        }
-        MouseEventKind::ScrollDown => {
-            // Same as `j`: move selection down on EntryList
-            if app.screen == Screen::EntryList {
+            Screen::EntryList => {
+                if app.selected_index > 0 {
+                    app.selected_index -= 1;
+                }
+            }
+            _ => {}
+        },
+        MouseEventKind::ScrollDown => match app.screen {
+            Screen::VaultPicker => {
+                picker_move_down(app);
+            }
+            Screen::EntryList => {
                 let count = app.filtered_entries().len();
                 if count > 0 && app.selected_index + 1 < count {
                     app.selected_index += 1;
                 }
             }
-        }
+            _ => {}
+        },
         MouseEventKind::Down(MouseButton::Left) => {
             match app.screen {
+                Screen::VaultPicker => {
+                    // Title bar is 3 rows tall; hints at bottom is 2 rows.
+                    // List starts at row 3 (0-indexed). Inner area starts at row 4 (inside border).
+                    let row = mouse.row as usize;
+                    if row >= 4 {
+                        let index = app.picker_scroll_offset + (row - 4);
+                        if index < app.picker_entries.len() {
+                            app.picker_selected = index;
+                        }
+                    }
+                }
                 Screen::EntryList => {
                     // Layout: row 0-2 = search bar (3 rows), row 3 = table header, row 4+ = entries
                     let row = mouse.row as usize;
@@ -50,6 +70,68 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
         }
         _ => {}
     }
+}
+
+fn picker_move_up(app: &mut App) {
+    if app.picker_selected > 0 {
+        app.picker_selected -= 1;
+        // Adjust scroll so selection stays visible
+        if app.picker_selected < app.picker_scroll_offset {
+            app.picker_scroll_offset = app.picker_selected;
+        }
+    }
+}
+
+fn picker_move_down(app: &mut App) {
+    let count = app.picker_entries.len();
+    if count > 0 && app.picker_selected + 1 < count {
+        app.picker_selected += 1;
+        // Adjust scroll — assume a reasonable visible window
+        // We use 20 as VISIBLE_ROWS to match the UI constant
+        let visible = 20usize;
+        if app.picker_selected >= app.picker_scroll_offset + visible {
+            app.picker_scroll_offset = app.picker_selected.saturating_sub(visible - 1);
+        }
+    }
+}
+
+fn handle_vault_picker(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            picker_move_down(app);
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            picker_move_up(app);
+        }
+        KeyCode::Enter => {
+            app.picker_enter();
+        }
+        KeyCode::Char('n') => {
+            // Create a new vault named "new.sifr" in the current picker dir
+            // (simple placeholder: sets path and goes to Unlock where user sets password)
+            let vault_path = app.picker_path.join("new.sifr");
+            app.vault_path = vault_path.to_string_lossy().to_string();
+            app.screen = Screen::Unlock;
+        }
+        KeyCode::Char('~') => {
+            if let Some(home) = home_dir() {
+                app.picker_path = home;
+                app.refresh_picker();
+            }
+        }
+        KeyCode::Char('q') | KeyCode::Esc => {
+            app.running = false;
+        }
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.running = false;
+        }
+        _ => {}
+    }
+}
+
+/// Returns the user's home directory.
+fn home_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
 fn handle_unlock(app: &mut App, key: KeyEvent) {

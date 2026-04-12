@@ -36,8 +36,8 @@ enum Commands {
     },
     /// Open an existing vault and enter the TUI
     Open {
-        /// Path to the vault file
-        path: String,
+        /// Path to the vault file (optional; opens file picker if omitted)
+        path: Option<String>,
     },
     /// Generate a random password
     Gen {
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_tui(vault_path: String) -> Result<()> {
+fn run_tui(vault_path: Option<String>) -> Result<()> {
     // Set up terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -94,7 +94,11 @@ fn run_tui(vault_path: String) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(vault_path);
+    let path = vault_path.unwrap_or_default();
+    let mut app = App::new(path.clone());
+    if path.is_empty() {
+        app.screen = app::Screen::VaultPicker;
+    }
 
     let result = run_loop(&mut terminal, &mut app);
 
