@@ -19,3 +19,4 @@ crossterm.workspace = true
 anyhow.workspace = true
 arboard.workspace = true
 tokio.workspace = true
+zeroize.workspace = true

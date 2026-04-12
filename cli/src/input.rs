@@ -139,7 +139,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
         KeyCode::Enter => {
             // Mock unlock: accept any password
             app.screen = Screen::EntryList;
-            app.password_input.clear();
+            zeroize::Zeroize::zeroize(&mut app.password_input);
         }
         KeyCode::Char('q') if app.password_input.is_empty() => {
             app.running = false;

@@ -86,7 +86,19 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+}
+
 fn run_tui(vault_path: Option<String>) -> Result<()> {
+    // Install panic hook so terminal is always restored, even on panic
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        original_hook(info);
+    }));
+
     // Set up terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -109,13 +121,11 @@ fn run_tui(vault_path: Option<String>) -> Result<()> {
         }
     }
 
-    // Restore terminal regardless of result
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    // Zeroize password input before drop
+    zeroize::Zeroize::zeroize(&mut app.password_input);
+
+    // Restore terminal
+    restore_terminal();
     terminal.show_cursor()?;
 
     result
