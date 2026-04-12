@@ -9,6 +9,18 @@ use crate::app::App;
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let tb = app.theme_bridge();
+
+    // Show clipboard notification when active
+    if let Some(ref notification) = app.clipboard_notification {
+        let line = Line::from(vec![
+            Span::styled(" ", tb.status_bar()),
+            Span::styled(notification.clone(), tb.accent()),
+        ]);
+        let bar = Paragraph::new(line).style(tb.status_bar());
+        f.render_widget(bar, area);
+        return;
+    }
+
     let theme_name = match app.theme.active() {
         Some(t) => t.name.clone(),
         None => "Terminal".to_string(),

@@ -8,7 +8,7 @@ use std::io;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use crossterm::{
-    event::{self, Event},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -90,7 +90,7 @@ fn run_tui(vault_path: String) -> Result<()> {
     // Set up terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -98,9 +98,20 @@ fn run_tui(vault_path: String) -> Result<()> {
 
     let result = run_loop(&mut terminal, &mut app);
 
+    // Clear clipboard if timer is still active
+    if app.clipboard_clear_at.is_some() {
+        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+            let _ = clipboard.set_text(String::new());
+        }
+    }
+
     // Restore terminal regardless of result
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     result
@@ -109,9 +120,26 @@ fn run_tui(vault_path: String) -> Result<()> {
 fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
-        if let Event::Key(key) = event::read()? {
-            input::handle_key(app, key);
+
+        if crossterm::event::poll(std::time::Duration::from_millis(250))? {
+            match event::read()? {
+                Event::Key(key) => input::handle_key(app, key),
+                Event::Mouse(mouse) => input::handle_mouse(app, mouse),
+                _ => {}
+            }
         }
+
+        // Check clipboard auto-clear timer
+        if let Some(clear_at) = app.clipboard_clear_at {
+            if std::time::Instant::now() >= clear_at {
+                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                    let _ = clipboard.set_text(String::new());
+                }
+                app.clipboard_clear_at = None;
+                app.clipboard_notification = None;
+            }
+        }
+
         if !app.running {
             break;
         }

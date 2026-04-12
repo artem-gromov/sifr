@@ -29,6 +29,8 @@ pub struct App {
     pub theme: ThemeRegistry,
     pub password_input: String,
     pub password_visible: bool,
+    pub clipboard_notification: Option<String>,
+    pub clipboard_clear_at: Option<std::time::Instant>,
 }
 
 impl App {
@@ -95,6 +97,25 @@ impl App {
             theme: ThemeRegistry::new(),
             password_input: String::new(),
             password_visible: false,
+            clipboard_notification: None,
+            clipboard_clear_at: None,
+        }
+    }
+
+    pub fn copy_to_clipboard(&mut self, text: &str) {
+        match arboard::Clipboard::new() {
+            Ok(mut clipboard) => {
+                if clipboard.set_text(text.to_string()).is_ok() {
+                    self.clipboard_notification = Some("Copied! Auto-clears in 30s".into());
+                    self.clipboard_clear_at =
+                        Some(std::time::Instant::now() + std::time::Duration::from_secs(30));
+                } else {
+                    self.clipboard_notification = Some("Clipboard unavailable".into());
+                }
+            }
+            Err(_) => {
+                self.clipboard_notification = Some("Clipboard unavailable".into());
+            }
         }
     }
 
