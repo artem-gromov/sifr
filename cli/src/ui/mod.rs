@@ -12,7 +12,7 @@ use ratatui::{
 
 use crate::app::{App, Screen};
 
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     match app.screen {
         Screen::VaultPicker => vault_picker::draw(f, app),
         Screen::Unlock => unlock::draw(f, app),
@@ -43,16 +43,19 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
                 Span::styled(e.title.clone(), tb.text()),
             ]),
             Line::from(vec![
-                Span::styled("  URL:      ", tb.muted()),
-                Span::styled(e.url.clone(), tb.blue()),
-            ]),
-            Line::from(vec![
                 Span::styled("  Username: ", tb.muted()),
                 Span::styled(e.username.clone(), tb.text()),
             ]),
             Line::from(vec![
                 Span::styled("  Password: ", tb.muted()),
-                Span::styled("**********", tb.accent()),
+                Span::styled(
+                    "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
+                    tb.accent(),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("  URL:      ", tb.muted()),
+                Span::styled(e.url.clone(), tb.blue()),
             ]),
             Line::from(vec![
                 Span::styled("  Category: ", tb.muted()),
@@ -88,7 +91,7 @@ fn draw_help(f: &mut Frame, app: &App) {
     let bg = Block::default().style(tb.bg());
     f.render_widget(bg, full);
 
-    let modal_area = centered_rect_pct(50, 70, full);
+    let modal_area = centered_rect_pct(55, 80, full);
     f.render_widget(Clear, modal_area);
 
     let content = vec![
@@ -117,6 +120,30 @@ fn draw_help(f: &mut Frame, app: &App) {
             Span::styled("Cancel search", tb.muted()),
         ]),
         Line::from(""),
+        Line::from(Span::styled("  Clipboard (List & Detail)", tb.accent())),
+        Line::from(vec![
+            Span::styled("    y / c      ", tb.text()),
+            Span::styled("Copy password (auto-clears in 30s)", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    u          ", tb.text()),
+            Span::styled("Copy username", tb.muted()),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("  Mouse", tb.accent())),
+        Line::from(vec![
+            Span::styled("    Click      ", tb.text()),
+            Span::styled("Select entry", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    Dbl-click  ", tb.text()),
+            Span::styled("Title=open, Username/Password=copy", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    Scroll     ", tb.text()),
+            Span::styled("Navigate up / down", tb.muted()),
+        ]),
+        Line::from(""),
         Line::from(Span::styled("  Actions", tb.accent())),
         Line::from(vec![
             Span::styled("    a          ", tb.text()),
@@ -133,26 +160,6 @@ fn draw_help(f: &mut Frame, app: &App) {
         Line::from(vec![
             Span::styled("    q / Esc    ", tb.text()),
             Span::styled("Quit", tb.muted()),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled("  Clipboard (Entry Detail)", tb.accent())),
-        Line::from(vec![
-            Span::styled("    y / c      ", tb.text()),
-            Span::styled("Copy password (auto-clears in 30s)", tb.muted()),
-        ]),
-        Line::from(vec![
-            Span::styled("    u          ", tb.text()),
-            Span::styled("Copy username", tb.muted()),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled("  Mouse", tb.accent())),
-        Line::from(vec![
-            Span::styled("    Click      ", tb.text()),
-            Span::styled("Select entry", tb.muted()),
-        ]),
-        Line::from(vec![
-            Span::styled("    Scroll     ", tb.text()),
-            Span::styled("Navigate up / down", tb.muted()),
         ]),
         Line::from(""),
         Line::from(Span::styled("  Press q or ? to close", tb.muted())),

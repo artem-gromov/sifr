@@ -21,8 +21,9 @@ pub struct PickerEntry {
 #[derive(Debug, Clone)]
 pub struct MockEntry {
     pub title: String,
-    pub url: String,
     pub username: String,
+    pub password: String,
+    pub url: String,
     pub category: String,
 }
 
@@ -39,6 +40,9 @@ pub struct App {
     pub password_visible: bool,
     pub clipboard_notification: Option<String>,
     pub clipboard_clear_at: Option<std::time::Instant>,
+    // Double-click tracking
+    pub last_click: Option<(std::time::Instant, u16, u16)>,
+    pub column_boundaries: Vec<u16>,
     // Vault picker state
     pub picker_path: std::path::PathBuf,
     pub picker_entries: Vec<PickerEntry>,
@@ -51,50 +55,58 @@ impl App {
         let entries = vec![
             MockEntry {
                 title: "GitHub".into(),
-                url: "github.com".into(),
                 username: "john@example.com".into(),
+                password: "Gh$ecure!2024".into(),
+                url: "github.com".into(),
                 category: "Dev".into(),
             },
             MockEntry {
                 title: "AWS Console".into(),
-                url: "aws.amazon.com".into(),
                 username: "admin@example.com".into(),
+                password: "AwS#root99!".into(),
+                url: "aws.amazon.com".into(),
                 category: "Cloud".into(),
             },
             MockEntry {
                 title: "Gmail".into(),
-                url: "mail.google.com".into(),
                 username: "john@gmail.com".into(),
+                password: "gM@il_pass42".into(),
+                url: "mail.google.com".into(),
                 category: "Email".into(),
             },
             MockEntry {
                 title: "Netflix".into(),
-                url: "netflix.com".into(),
                 username: "john@gmail.com".into(),
+                password: "Nf!ixStream8".into(),
+                url: "netflix.com".into(),
                 category: "Media".into(),
             },
             MockEntry {
                 title: "Cloudflare".into(),
-                url: "cloudflare.com".into(),
                 username: "admin@example.com".into(),
+                password: "Cf#dns!2024".into(),
+                url: "cloudflare.com".into(),
                 category: "Cloud".into(),
             },
             MockEntry {
                 title: "Figma".into(),
-                url: "figma.com".into(),
                 username: "john@example.com".into(),
+                password: "F1gma$D3sign".into(),
+                url: "figma.com".into(),
                 category: "Design".into(),
             },
             MockEntry {
                 title: "Spotify".into(),
-                url: "spotify.com".into(),
                 username: "john@gmail.com".into(),
+                password: "Sp0t!fyBeat$".into(),
+                url: "spotify.com".into(),
                 category: "Media".into(),
             },
             MockEntry {
                 title: "Vercel".into(),
-                url: "vercel.com".into(),
                 username: "john@example.com".into(),
+                password: "V3rc3l!D3ploy".into(),
+                url: "vercel.com".into(),
                 category: "Dev".into(),
             },
         ];
@@ -113,6 +125,8 @@ impl App {
             password_visible: false,
             clipboard_notification: None,
             clipboard_clear_at: None,
+            last_click: None,
+            column_boundaries: Vec::new(),
             picker_path,
             picker_entries: Vec::new(),
             picker_selected: 0,
