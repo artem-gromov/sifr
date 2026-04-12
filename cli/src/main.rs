@@ -88,12 +88,7 @@ fn main() -> Result<()> {
 
 fn restore_terminal() {
     let _ = disable_raw_mode();
-    let _ = execute!(
-        io::stdout(),
-        LeaveAlternateScreen,
-        DisableMouseCapture,
-        crossterm::cursor::Show
-    );
+    let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
 }
 
 fn run_tui(vault_path: Option<String>) -> Result<()> {
@@ -107,12 +102,7 @@ fn run_tui(vault_path: Option<String>) -> Result<()> {
     // Set up terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        EnableMouseCapture,
-        crossterm::cursor::Hide
-    )?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
