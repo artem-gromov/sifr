@@ -5,6 +5,24 @@ fn temp_vault_path(dir: &TempDir) -> String {
     dir.path().join("test.vault").to_str().unwrap().to_owned()
 }
 
+fn new_entry(
+    title: &str,
+    username: Option<&str>,
+    password: Option<&str>,
+    url: Option<&str>,
+    notes: Option<&str>,
+) -> NewEntry {
+    NewEntry {
+        title: title.into(),
+        username: username.map(Into::into),
+        password: password.map(Into::into),
+        url: url.map(Into::into),
+        notes: notes.map(Into::into),
+        totp_secret: None,
+        category_id: None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Vault lifecycle
 // ---------------------------------------------------------------------------
@@ -57,16 +75,14 @@ fn test_entry_crud() {
     let vault = make_vault(&dir);
 
     // Add
-    let entry = vault
-        .add_entry(&NewEntry {
-            title: "GitHub".into(),
-            username: Some("alice".into()),
-            password: Some("s3cr3t".into()),
-            url: Some("https://github.com".into()),
-            notes: Some("work account".into()),
-            ..Default::default()
-        })
-        .unwrap();
+    let ne = new_entry(
+        "GitHub",
+        Some("alice"),
+        Some("s3cr3t"),
+        Some("https://github.com"),
+        Some("work account"),
+    );
+    let entry = vault.add_entry(&ne).unwrap();
     assert_eq!(entry.title, "GitHub");
     assert_eq!(entry.username.as_deref(), Some("alice"));
     assert_eq!(entry.password.as_deref(), Some("s3cr3t"));
@@ -84,16 +100,17 @@ fn test_entry_crud() {
     assert_eq!(list[0].id, id);
 
     // Update
-    let updated = vault
-        .update_entry(
-            id,
-            EntryUpdate {
-                title: Some("GitHub (work)".into()),
-                favorite: Some(true),
-                ..Default::default()
-            },
-        )
-        .unwrap();
+    let upd = EntryUpdate {
+        title: Some("GitHub (work)".into()),
+        username: None,
+        password: None,
+        url: None,
+        notes: None,
+        totp_secret: None,
+        category_id: None,
+        favorite: Some(true),
+    };
+    let updated = vault.update_entry(id, upd).unwrap();
     assert_eq!(updated.title, "GitHub (work)");
     assert!(updated.favorite);
     // Password unchanged
@@ -130,34 +147,32 @@ fn test_entry_search() {
     let dir = TempDir::new().unwrap();
     let vault = make_vault(&dir);
 
-    vault
-        .add_entry(&NewEntry {
-            title: "GitHub".into(),
-            username: Some("alice".into()),
-            password: Some("pw1".into()),
-            url: Some("https://github.com".into()),
-            ..Default::default()
-        })
-        .unwrap();
-    vault
-        .add_entry(&NewEntry {
-            title: "GitLab".into(),
-            username: Some("alice".into()),
-            password: Some("pw2".into()),
-            url: Some("https://gitlab.com".into()),
-            ..Default::default()
-        })
-        .unwrap();
-    vault
-        .add_entry(&NewEntry {
-            title: "AWS Console".into(),
-            username: Some("ops@example.com".into()),
-            password: Some("pw3".into()),
-            url: Some("https://aws.amazon.com".into()),
-            notes: Some("production account".into()),
-            ..Default::default()
-        })
-        .unwrap();
+    let e1 = new_entry(
+        "GitHub",
+        Some("alice"),
+        Some("pw1"),
+        Some("https://github.com"),
+        None,
+    );
+    vault.add_entry(&e1).unwrap();
+
+    let e2 = new_entry(
+        "GitLab",
+        Some("alice"),
+        Some("pw2"),
+        Some("https://gitlab.com"),
+        None,
+    );
+    vault.add_entry(&e2).unwrap();
+
+    let e3 = new_entry(
+        "AWS Console",
+        Some("ops@example.com"),
+        Some("pw3"),
+        Some("https://aws.amazon.com"),
+        Some("production account"),
+    );
+    vault.add_entry(&e3).unwrap();
 
     // Search by title prefix
     let git_results = vault.search_entries("git").unwrap();

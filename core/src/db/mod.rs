@@ -14,9 +14,10 @@ pub enum DbError {
 /// The key is derived externally via `crypto::derive_key` and passed as hex.
 pub fn open(path: &str, key: &Zeroizing<[u8; 32]>) -> Result<Connection, DbError> {
     let conn = Connection::open(path)?;
-    let hex_key = hex_key(key);
-    conn.execute_batch(&format!("PRAGMA key = \"x'{}'\"", hex_key))?;
+    // cipher_page_size MUST be set before PRAGMA key for SQLCipher
     conn.execute_batch("PRAGMA cipher_page_size = 4096;")?;
+    let pragma = hex_key_pragma(key);
+    conn.execute_batch(&pragma)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     Ok(conn)
 }
@@ -38,6 +39,13 @@ pub fn is_initialised(conn: &Connection) -> bool {
         > 0
 }
 
-fn hex_key(key: &Zeroizing<[u8; 32]>) -> String {
-    key.iter().map(|b| format!("{:02x}", b)).collect()
+/// Formats the key as a hex string wrapped in `Zeroizing` so it is wiped on drop.
+fn hex_key(key: &Zeroizing<[u8; 32]>) -> Zeroizing<String> {
+    Zeroizing::new(key.iter().map(|b| format!("{:02x}", b)).collect())
+}
+
+/// Builds the full PRAGMA key statement, also wrapped in `Zeroizing`.
+fn hex_key_pragma(key: &Zeroizing<[u8; 32]>) -> Zeroizing<String> {
+    let hex = hex_key(key);
+    Zeroizing::new(format!("PRAGMA key = \"x'{}'\"", *hex))
 }

@@ -35,7 +35,7 @@ pub enum VaultError {
 /// High-level handle to an open, authenticated vault.
 #[derive(Debug)]
 pub struct Vault {
-    pub conn: Connection,
+    conn: Connection,
 }
 
 impl Vault {
@@ -50,6 +50,15 @@ impl Vault {
         // Write salt to companion file — Argon2 salt is not secret
         let salt_path = format!("{}.salt", path);
         std::fs::write(&salt_path, salt)?;
+
+        // Restrict permissions to owner-only on Unix systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(&salt_path, perms)?;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        }
 
         Ok(Self { conn })
     }
@@ -131,24 +140,33 @@ impl Vault {
     }
 
     /// Applies the non-None fields of `updates` to the entry with the given id.
-    pub fn update_entry(&self, id: i64, updates: EntryUpdate) -> Result<Entry, VaultError> {
+    pub fn update_entry(&self, id: i64, mut updates: EntryUpdate) -> Result<Entry, VaultError> {
         // Verify entry exists first
         let existing = self.get_entry(id)?;
 
-        let title = updates.title.unwrap_or_else(|| existing.title.clone());
+        let title = updates
+            .title
+            .take()
+            .unwrap_or_else(|| existing.title.clone());
         let username = updates
             .username
+            .take()
             .unwrap_or_else(|| existing.username.clone());
         let password = updates
             .password
+            .take()
             .unwrap_or_else(|| existing.password.clone());
-        let url = updates.url.unwrap_or_else(|| existing.url.clone());
-        let notes = updates.notes.unwrap_or_else(|| existing.notes.clone());
+        let url = updates.url.take().unwrap_or_else(|| existing.url.clone());
+        let notes = updates
+            .notes
+            .take()
+            .unwrap_or_else(|| existing.notes.clone());
         let totp_secret = updates
             .totp_secret
+            .take()
             .unwrap_or_else(|| existing.totp_secret.clone());
-        let category_id = updates.category_id.unwrap_or(existing.category_id);
-        let favorite = updates.favorite.unwrap_or(existing.favorite);
+        let category_id = updates.category_id.take().unwrap_or(existing.category_id);
+        let favorite = updates.favorite.take().unwrap_or(existing.favorite);
 
         let favorite_int: i64 = if favorite { 1 } else { 0 };
         self.conn.execute(
