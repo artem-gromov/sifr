@@ -57,7 +57,10 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
                 Span::styled(e.category.clone(), tb.purple()),
             ]),
             Line::from(""),
-            Line::from(Span::styled("  Esc/q to go back", tb.muted())),
+            Line::from(Span::styled(
+                "  y/c copy password  u copy username  Esc/q back",
+                tb.muted(),
+            )),
             Line::from(""),
         ]
     } else {
@@ -128,6 +131,26 @@ fn draw_help(f: &mut Frame, app: &App) {
         Line::from(vec![
             Span::styled("    q / Esc    ", tb.text()),
             Span::styled("Quit", tb.muted()),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("  Clipboard (Entry Detail)", tb.accent())),
+        Line::from(vec![
+            Span::styled("    y / c      ", tb.text()),
+            Span::styled("Copy password (auto-clears in 30s)", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    u          ", tb.text()),
+            Span::styled("Copy username", tb.muted()),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("  Mouse", tb.accent())),
+        Line::from(vec![
+            Span::styled("    Click      ", tb.text()),
+            Span::styled("Select entry", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    Scroll     ", tb.text()),
+            Span::styled("Navigate up / down", tb.muted()),
         ]),
         Line::from(""),
         Line::from(Span::styled("  Press q or ? to close", tb.muted())),
