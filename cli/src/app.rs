@@ -4,10 +4,18 @@ use crate::theme_bridge::ThemeBridge;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
+    VaultPicker,
     Unlock,
     EntryList,
     EntryDetail,
     Help,
+}
+
+#[derive(Debug, Clone)]
+pub struct PickerEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub is_vault: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +39,11 @@ pub struct App {
     pub password_visible: bool,
     pub clipboard_notification: Option<String>,
     pub clipboard_clear_at: Option<std::time::Instant>,
+    // Vault picker state
+    pub picker_path: std::path::PathBuf,
+    pub picker_entries: Vec<PickerEntry>,
+    pub picker_selected: usize,
+    pub picker_scroll_offset: usize,
 }
 
 impl App {
@@ -86,7 +99,8 @@ impl App {
             },
         ];
 
-        Self {
+        let picker_path = std::env::current_dir().unwrap_or_default();
+        let mut app = Self {
             screen: Screen::Unlock,
             running: true,
             vault_path,
@@ -99,6 +113,93 @@ impl App {
             password_visible: false,
             clipboard_notification: None,
             clipboard_clear_at: None,
+            picker_path,
+            picker_entries: Vec::new(),
+            picker_selected: 0,
+            picker_scroll_offset: 0,
+        };
+        app.refresh_picker();
+        app
+    }
+
+    /// Reads `picker_path` and populates `picker_entries`.
+    /// Sort order: `..` first, then dirs alphabetically, then .sifr files, then other files.
+    /// Only dirs, .sifr files, and `..` are shown.
+    pub fn refresh_picker(&mut self) {
+        let mut dirs: Vec<PickerEntry> = Vec::new();
+        let mut vaults: Vec<PickerEntry> = Vec::new();
+
+        match std::fs::read_dir(&self.picker_path) {
+            Ok(read_dir) => {
+                for entry_result in read_dir {
+                    let dir_entry = match entry_result {
+                        Ok(e) => e,
+                        Err(_) => continue,
+                    };
+                    let name = dir_entry.file_name().to_string_lossy().to_string();
+                    // Skip hidden files (starting with .) except we already add ".." manually
+                    let Ok(metadata) = dir_entry.metadata() else {
+                        continue;
+                    };
+                    let is_dir = metadata.is_dir();
+                    let is_vault = !is_dir && name.ends_with(".sifr");
+                    if is_dir {
+                        dirs.push(PickerEntry {
+                            name,
+                            is_dir: true,
+                            is_vault: false,
+                        });
+                    } else if is_vault {
+                        vaults.push(PickerEntry {
+                            name,
+                            is_dir: false,
+                            is_vault: true,
+                        });
+                    }
+                }
+            }
+            Err(_) => {
+                // Access denied or other error — leave entries empty except for ".."
+            }
+        }
+
+        dirs.sort_by(|a, b| a.name.cmp(&b.name));
+        vaults.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let mut entries: Vec<PickerEntry> = Vec::new();
+        // Always add parent dir entry if not at filesystem root
+        entries.push(PickerEntry {
+            name: "..".to_string(),
+            is_dir: true,
+            is_vault: false,
+        });
+        entries.extend(dirs);
+        entries.extend(vaults);
+
+        self.picker_entries = entries;
+        self.picker_selected = 0;
+        self.picker_scroll_offset = 0;
+    }
+
+    /// Navigate picker: cd into dir or open vault.
+    pub fn picker_enter(&mut self) {
+        let Some(entry) = self.picker_entries.get(self.picker_selected) else {
+            return;
+        };
+        if entry.name == ".." {
+            // Go up
+            if let Some(parent) = self.picker_path.parent().map(|p| p.to_path_buf()) {
+                self.picker_path = parent;
+            }
+            self.refresh_picker();
+        } else if entry.is_dir {
+            let new_path = self.picker_path.join(&entry.name);
+            self.picker_path = new_path;
+            self.refresh_picker();
+        } else if entry.is_vault {
+            let vault_path = self.picker_path.join(&entry.name);
+            self.vault_path = vault_path.to_string_lossy().to_string();
+            self.screen = Screen::Unlock;
         }
     }
 
