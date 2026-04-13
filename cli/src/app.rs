@@ -9,6 +9,16 @@ pub enum Screen {
     EntryList,
     EntryDetail,
     Help,
+    AddEntry,
+    EditEntry,
+}
+
+#[derive(Debug, Clone)]
+pub struct FormField {
+    pub label: String,
+    pub value: String,
+    pub required: bool,
+    pub secret: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +62,12 @@ pub struct App {
     pub picker_entries: Vec<PickerEntry>,
     pub picker_selected: usize,
     pub picker_scroll_offset: usize,
+    // Entry form state
+    pub form_fields: Vec<FormField>,
+    pub form_focused: usize,
+    pub form_editing_id: Option<i64>,
+    pub form_password_visible: bool,
+    pub confirm_delete: Option<i64>,
 }
 
 impl App {
@@ -83,6 +99,11 @@ impl App {
             picker_entries: Vec::new(),
             picker_selected: 0,
             picker_scroll_offset: 0,
+            form_fields: Vec::new(),
+            form_focused: 0,
+            form_editing_id: None,
+            form_password_visible: false,
+            confirm_delete: None,
         };
         app.refresh_picker();
         app
@@ -227,6 +248,75 @@ impl App {
         match self.theme.active() {
             Some(t) => ThemeBridge::new(&t.palette),
             None => ThemeBridge::terminal(),
+        }
+    }
+
+    fn make_form_fields() -> Vec<FormField> {
+        vec![
+            FormField {
+                label: "Title".to_string(),
+                value: String::new(),
+                required: true,
+                secret: false,
+            },
+            FormField {
+                label: "Username".to_string(),
+                value: String::new(),
+                required: false,
+                secret: false,
+            },
+            FormField {
+                label: "Password".to_string(),
+                value: String::new(),
+                required: false,
+                secret: true,
+            },
+            FormField {
+                label: "URL".to_string(),
+                value: String::new(),
+                required: false,
+                secret: false,
+            },
+            FormField {
+                label: "Notes".to_string(),
+                value: String::new(),
+                required: false,
+                secret: false,
+            },
+        ]
+    }
+
+    pub fn init_add_form(&mut self) {
+        self.form_fields = Self::make_form_fields();
+        self.form_focused = 0;
+        self.form_editing_id = None;
+        self.form_password_visible = false;
+        self.error_message = None;
+        self.error_clear_at = None;
+        self.screen = Screen::AddEntry;
+    }
+
+    pub fn init_edit_form(&mut self, entry: &sifr_core::models::Entry) {
+        let mut fields = Self::make_form_fields();
+        fields[0].value = entry.title.clone();
+        fields[1].value = entry.username.as_deref().unwrap_or("").to_string();
+        fields[2].value = entry.password.as_deref().unwrap_or("").to_string();
+        fields[3].value = entry.url.as_deref().unwrap_or("").to_string();
+        fields[4].value = entry.notes.as_deref().unwrap_or("").to_string();
+        self.form_fields = fields;
+        self.form_focused = 0;
+        self.form_editing_id = Some(entry.id);
+        self.form_password_visible = false;
+        self.error_message = None;
+        self.error_clear_at = None;
+        self.screen = Screen::EditEntry;
+    }
+
+    pub fn zeroize_form_password(&mut self) {
+        for field in &mut self.form_fields {
+            if field.secret {
+                zeroize::Zeroize::zeroize(&mut field.value);
+            }
         }
     }
 
