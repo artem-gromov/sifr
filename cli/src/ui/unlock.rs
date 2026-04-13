@@ -19,7 +19,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Taller modal for create mode (two fields + error line)
     let modal_width = 42u16;
-    let modal_height = if is_create { 14u16 } else { 11u16 };
+    let modal_height = if is_create { 14u16 } else { 12u16 };
     let area = centered_rect(modal_width, modal_height, full);
 
     // Clear behind modal
@@ -89,6 +89,10 @@ pub fn draw(f: &mut Frame, app: &App) {
         }
     } else {
         content.push(Line::from(Span::styled("  Sifr", tb.title())));
+        content.push(Line::from(Span::styled(
+            format!("  {}", vault_name),
+            tb.subtext(),
+        )));
         content.push(Line::from(""));
         content.push(Line::from(Span::styled("  Master Password:", tb.text())));
         content.push(Line::from(Span::styled(

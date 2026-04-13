@@ -116,19 +116,47 @@ pub fn draw(f: &mut Frame, app: &App) {
         }
     }
 
+    // ── Naming input (shown when naming a new vault) ───────────────────────
+    if let Some(ref name) = app.picker_naming {
+        let name_line = Line::from(vec![
+            Span::styled("  New vault: [", tb.muted()),
+            Span::styled(format!("{:<20}", name), tb.accent()),
+            Span::styled("]", tb.muted()),
+        ]);
+        let name_area = ratatui::layout::Rect {
+            x: inner.x,
+            y: inner.y + inner.height.saturating_sub(1),
+            width: inner.width,
+            height: 1,
+        };
+        if name_area.y < full.y + full.height {
+            let name_para = Paragraph::new(name_line);
+            f.render_widget(name_para, name_area);
+        }
+    }
+
     // ── Bottom hints ───────────────────────────────────────────────────────
-    let hints = Line::from(vec![
-        Span::styled("  j/k", tb.accent()),
-        Span::styled(" navigate  ", tb.muted()),
-        Span::styled("Enter", tb.accent()),
-        Span::styled(" open  ", tb.muted()),
-        Span::styled("n", tb.accent()),
-        Span::styled(" new vault  ", tb.muted()),
-        Span::styled("~", tb.accent()),
-        Span::styled(" home  ", tb.muted()),
-        Span::styled("q", tb.accent()),
-        Span::styled(" quit", tb.muted()),
-    ]);
+    let hints = if app.picker_naming.is_some() {
+        Line::from(vec![
+            Span::styled("  Enter", tb.accent()),
+            Span::styled(" create  ", tb.muted()),
+            Span::styled("Esc", tb.accent()),
+            Span::styled(" cancel", tb.muted()),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  j/k", tb.accent()),
+            Span::styled(" navigate  ", tb.muted()),
+            Span::styled("Enter", tb.accent()),
+            Span::styled(" open  ", tb.muted()),
+            Span::styled("n", tb.accent()),
+            Span::styled(" new vault  ", tb.muted()),
+            Span::styled("~", tb.accent()),
+            Span::styled(" home  ", tb.muted()),
+            Span::styled("q", tb.accent()),
+            Span::styled(" quit", tb.muted()),
+        ])
+    };
     let hints_block = Block::default().style(tb.bg());
     let hints_para = Paragraph::new(hints).block(hints_block);
     f.render_widget(hints_para, chunks[2]);
