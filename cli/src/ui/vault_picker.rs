@@ -120,7 +120,14 @@ pub fn draw(f: &mut Frame, app: &App) {
     if let Some(ref name) = app.picker_naming {
         let name_line = Line::from(vec![
             Span::styled("  New vault: [", tb.muted()),
-            Span::styled(format!("{:<20}", name), tb.accent()),
+            Span::styled(
+                format!(
+                    "{}\u{258c}{}",
+                    name,
+                    " ".repeat(20usize.saturating_sub(name.len() + 1))
+                ),
+                tb.accent(),
+            ),
             Span::styled("]", tb.muted()),
         ]);
         let name_area = ratatui::layout::Rect {

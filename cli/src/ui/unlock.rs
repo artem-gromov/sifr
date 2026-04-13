@@ -16,42 +16,61 @@ pub fn draw(f: &mut Frame, app: &App) {
     f.render_widget(bg, full);
 
     let is_create = app.unlock_mode == UnlockMode::Create;
+    let vault_display = &app.vault_path;
 
-    // Taller modal for create mode (two fields + error line)
-    let modal_width = 42u16;
-    let modal_height = if is_create { 14u16 } else { 12u16 };
+    // Width adapts to vault path length (min 44, max 72)
+    let path_width = vault_display.len() as u16 + 6;
+    let modal_width = path_width.clamp(44, 72);
+    let modal_height = if is_create { 15u16 } else { 13u16 };
     let area = centered_rect(modal_width, modal_height, full);
 
     // Clear behind modal
     f.render_widget(Clear, area);
 
-    let vault_name = std::path::Path::new(&app.vault_path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(&app.vault_path);
+    // Input box inner width adapts to modal
+    let box_inner = (modal_width as usize).saturating_sub(8).max(20);
 
     let password_display = if app.password_visible {
         app.password_input.clone()
     } else {
         "\u{2022}".repeat(app.password_input.len())
     };
-    let input_line = format!("[{:<22}]", password_display);
+
+    let confirm_display = if app.password_visible {
+        app.password_confirm.clone()
+    } else {
+        "\u{2022}".repeat(app.password_confirm.len())
+    };
+
+    // Cursor marker on the active field
+    let pw_active = !is_create || !app.confirm_active;
+    let confirm_active = is_create && app.confirm_active;
+
+    let pw_text = if pw_active {
+        format!("{}▌", password_display)
+    } else {
+        password_display
+    };
+    let input_line = format!("[{:<width$}]", pw_text, width = box_inner);
+
+    let confirm_text = if confirm_active {
+        format!("{}▌", confirm_display)
+    } else {
+        confirm_display
+    };
+    let confirm_line = format!("[{:<width$}]", confirm_text, width = box_inner);
 
     let mut content = vec![Line::from("")];
 
     if is_create {
         content.push(Line::from(Span::styled(
-            format!("  {}", vault_name),
+            format!("  {}", vault_display),
             tb.subtext(),
         )));
         content.push(Line::from(""));
 
         // Password field
-        let pw_style = if !app.confirm_active {
-            tb.accent()
-        } else {
-            tb.muted()
-        };
+        let pw_style = if pw_active { tb.accent() } else { tb.muted() };
         content.push(Line::from(Span::styled("  Master Password:", tb.text())));
         content.push(Line::from(Span::styled(
             format!("  {}", input_line),
@@ -60,13 +79,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         content.push(Line::from(""));
 
         // Confirm field
-        let confirm_display = if app.password_visible {
-            app.password_confirm.clone()
-        } else {
-            "\u{2022}".repeat(app.password_confirm.len())
-        };
-        let confirm_line = format!("[{:<22}]", confirm_display);
-        let confirm_style = if app.confirm_active {
+        let cf_style = if confirm_active {
             tb.accent()
         } else {
             tb.muted()
@@ -74,23 +87,24 @@ pub fn draw(f: &mut Frame, app: &App) {
         content.push(Line::from(Span::styled("  Confirm Password:", tb.text())));
         content.push(Line::from(Span::styled(
             format!("  {}", confirm_line),
-            confirm_style,
+            cf_style,
         )));
         content.push(Line::from(""));
 
-        // Error message or hint
+        // Error or hints
         if let Some(ref err) = app.error_message {
             content.push(Line::from(Span::styled(format!("  {}", err), tb.red())));
         } else {
-            content.push(Line::from(Span::styled(
-                "  Enter confirm  Esc back",
-                tb.muted(),
-            )));
+            content.push(Line::from(vec![
+                Span::styled("  Enter", tb.accent()),
+                Span::styled(" confirm  ", tb.muted()),
+                Span::styled("Esc", tb.accent()),
+                Span::styled(" back", tb.muted()),
+            ]));
         }
     } else {
-        content.push(Line::from(Span::styled("  Sifr", tb.title())));
         content.push(Line::from(Span::styled(
-            format!("  {}", vault_name),
+            format!("  {}", vault_display),
             tb.subtext(),
         )));
         content.push(Line::from(""));
@@ -101,14 +115,18 @@ pub fn draw(f: &mut Frame, app: &App) {
         )));
         content.push(Line::from(""));
 
-        // Error message or hint
+        // Error or hints
         if let Some(ref err) = app.error_message {
             content.push(Line::from(Span::styled(format!("  {}", err), tb.red())));
         } else {
-            content.push(Line::from(Span::styled(
-                "  Enter unlock  Esc quit",
-                tb.muted(),
-            )));
+            content.push(Line::from(vec![
+                Span::styled("  Enter", tb.accent()),
+                Span::styled(" unlock  ", tb.muted()),
+                Span::styled("Tab", tb.accent()),
+                Span::styled(" browse  ", tb.muted()),
+                Span::styled("Esc", tb.accent()),
+                Span::styled(" quit", tb.muted()),
+            ]));
         }
     }
 
@@ -117,7 +135,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let title = if is_create {
         " Create New Vault "
     } else {
-        " Sifr Password Manager "
+        " Unlock Vault "
     };
 
     let block = Block::default()

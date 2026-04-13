@@ -258,6 +258,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                         Ok(vault) => {
                             app.vault = Some(vault);
                             app.refresh_entries();
+                            crate::config::save_last_vault(&path);
                             zeroize::Zeroize::zeroize(&mut app.password_input);
                             zeroize::Zeroize::zeroize(&mut app.password_confirm);
                             app.confirm_active = false;
@@ -281,6 +282,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                     Ok(vault) => {
                         app.vault = Some(vault);
                         app.refresh_entries();
+                        crate::config::save_last_vault(&path);
                         app.screen = Screen::EntryList;
                     }
                     Err(sifr_core::vault::VaultError::WrongPassword) => {
@@ -313,6 +315,14 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
             } else {
                 app.password_input.pop();
             }
+        }
+        KeyCode::Tab => {
+            // Switch to vault picker to choose a different file
+            zeroize::Zeroize::zeroize(&mut app.password_input);
+            zeroize::Zeroize::zeroize(&mut app.password_confirm);
+            app.confirm_active = false;
+            app.started_from_picker = true;
+            app.screen = Screen::VaultPicker;
         }
         KeyCode::Esc => {
             if app.unlock_mode == UnlockMode::Create && app.confirm_active {
