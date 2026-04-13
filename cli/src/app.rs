@@ -62,6 +62,7 @@ pub struct App {
     pub picker_entries: Vec<PickerEntry>,
     pub picker_selected: usize,
     pub picker_scroll_offset: usize,
+    pub picker_naming: Option<String>,
     // Entry form state
     pub form_fields: Vec<FormField>,
     pub form_focused: usize,
@@ -99,6 +100,7 @@ impl App {
             picker_entries: Vec::new(),
             picker_selected: 0,
             picker_scroll_offset: 0,
+            picker_naming: None,
             form_fields: Vec::new(),
             form_focused: 0,
             form_editing_id: None,

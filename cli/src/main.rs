@@ -24,7 +24,7 @@ use app::App;
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -34,7 +34,7 @@ enum Commands {
         /// Path for the new vault file
         path: String,
     },
-    /// Open an existing vault and enter the TUI
+    /// Open an existing vault and enter the TUI (omit path to open vault picker)
     Open {
         /// Path to the vault file (optional; opens file picker if omitted)
         path: Option<String>,
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::New { path } => {
+        Some(Commands::New { path }) => {
             use std::io::Write;
             print!("Master password: ");
             std::io::stdout().flush()?;
@@ -77,22 +77,26 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
             match sifr_core::Vault::create(&path, &password) {
-                Ok(_) => println!("Vault created at: {path}"),
+                Ok(vault) => {
+                    println!("Vault created at: {path}");
+                    // Launch TUI with vault already unlocked
+                    run_tui_inner(Some(path), Some(vault))?;
+                }
                 Err(e) => {
                     eprintln!("Failed to create vault: {e}");
                     std::process::exit(1);
                 }
             }
         }
-        Commands::Open { path } => {
+        Some(Commands::Open { path }) => {
             run_tui(path)?;
         }
-        Commands::Gen {
+        Some(Commands::Gen {
             length,
             no_symbols,
             no_numbers,
             no_uppercase,
-        } => {
+        }) => {
             let password = sifr_core::crypto::generate_password(
                 length,
                 !no_uppercase,
@@ -100,6 +104,10 @@ fn main() -> Result<()> {
                 !no_symbols,
             );
             println!("{}", &*password);
+        }
+        None => {
+            // Bare `sifr` → vault picker
+            run_tui(None)?;
         }
     }
 
@@ -112,6 +120,10 @@ fn restore_terminal() {
 }
 
 fn run_tui(vault_path: Option<String>) -> Result<()> {
+    run_tui_inner(vault_path, None)
+}
+
+fn run_tui_inner(vault_path: Option<String>, vault: Option<sifr_core::Vault>) -> Result<()> {
     // Install panic hook so terminal is always restored, even on panic
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -130,7 +142,13 @@ fn run_tui(vault_path: Option<String>) -> Result<()> {
     let started_from_picker = path.is_empty();
     let mut app = App::new(path.clone());
     app.started_from_picker = started_from_picker;
-    if path.is_empty() {
+
+    if let Some(v) = vault {
+        // Pre-opened vault (e.g. from `sifr new`)
+        app.vault = Some(v);
+        app.refresh_entries();
+        app.screen = app::Screen::EntryList;
+    } else if path.is_empty() {
         app.screen = app::Screen::VaultPicker;
     }
 

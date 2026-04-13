@@ -113,6 +113,8 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
             Span::styled(" copy pw  ", tb.muted()),
             Span::styled("u", tb.accent()),
             Span::styled(" copy user  ", tb.muted()),
+            Span::styled("f", tb.accent()),
+            Span::styled(" toggle fav  ", tb.muted()),
             Span::styled("e", tb.accent()),
             Span::styled(" edit  ", tb.muted()),
             Span::styled("d", tb.accent()),
@@ -210,6 +212,14 @@ fn draw_help(f: &mut Frame, app: &App) {
         Line::from(vec![
             Span::styled("    d          ", tb.text()),
             Span::styled("Delete entry", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    f          ", tb.text()),
+            Span::styled("Toggle favorite", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    L          ", tb.text()),
+            Span::styled("Lock vault", tb.muted()),
         ]),
         Line::from(vec![
             Span::styled("    Ctrl+G     ", tb.text()),

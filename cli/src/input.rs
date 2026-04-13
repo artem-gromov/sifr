@@ -154,6 +154,49 @@ fn picker_move_down(app: &mut App) {
 }
 
 fn handle_vault_picker(app: &mut App, key: KeyEvent) {
+    // When naming a new vault, intercept all key events
+    if app.picker_naming.is_some() {
+        match key.code {
+            KeyCode::Char(c) => {
+                if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                    if let Some(ref mut name) = app.picker_naming {
+                        name.push(c);
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut name) = app.picker_naming {
+                    name.pop();
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(name) = app.picker_naming.take() {
+                    if !name.is_empty() {
+                        let vault_name = if name.ends_with(".sifr") {
+                            name
+                        } else {
+                            format!("{}.sifr", name)
+                        };
+                        let vault_path = app.picker_path.join(&vault_name);
+                        app.vault_path = vault_path.to_string_lossy().to_string();
+                        app.unlock_mode = UnlockMode::Create;
+                        app.confirm_active = false;
+                        app.password_input.clear();
+                        app.password_confirm.clear();
+                        app.screen = Screen::Unlock;
+                    } else {
+                        app.picker_naming = None;
+                    }
+                }
+            }
+            KeyCode::Esc => {
+                app.picker_naming = None;
+            }
+            _ => {}
+        }
+        return;
+    }
+
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
             picker_move_down(app);
@@ -165,13 +208,7 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
             app.picker_enter();
         }
         KeyCode::Char('n') => {
-            let vault_path = app.picker_path.join("new.sifr");
-            app.vault_path = vault_path.to_string_lossy().to_string();
-            app.unlock_mode = UnlockMode::Create;
-            app.confirm_active = false;
-            app.password_input.clear();
-            app.password_confirm.clear();
-            app.screen = Screen::Unlock;
+            app.picker_naming = Some(String::new());
         }
         KeyCode::Char('~') => {
             if let Some(home) = home_dir() {
@@ -368,6 +405,44 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
                 app.copy_to_clipboard(&username);
             }
         }
+        KeyCode::Char('f') => {
+            let info = app
+                .filtered_entries()
+                .get(app.selected_index)
+                .map(|e| (e.id, !e.favorite));
+            if let Some((id, new_fav)) = info {
+                if let Some(ref vault) = app.vault {
+                    let updates = sifr_core::EntryUpdate {
+                        title: None,
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: None,
+                        totp_secret: None,
+                        category_id: None,
+                        favorite: Some(new_fav),
+                    };
+                    match vault.update_entry(id, updates) {
+                        Ok(_) => app.refresh_entries(),
+                        Err(e) => app.set_error(&format!("Failed: {}", e)),
+                    }
+                }
+            }
+        }
+        KeyCode::Char('L') => {
+            // Lock vault: clear all sensitive state
+            app.vault = None;
+            app.entries.clear();
+            app.selected_index = 0;
+            app.search_query.clear();
+            app.search_active = false;
+            zeroize::Zeroize::zeroize(&mut app.password_input);
+            if app.started_from_picker {
+                app.screen = Screen::VaultPicker;
+            } else {
+                app.screen = Screen::Unlock;
+            }
+        }
         _ => {}
     }
 }
@@ -406,6 +481,30 @@ fn handle_entry_detail(app: &mut App, key: KeyEvent) {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
                 let id = e.id;
                 app.confirm_delete = Some(id);
+            }
+        }
+        KeyCode::Char('f') => {
+            let info = app
+                .filtered_entries()
+                .get(app.selected_index)
+                .map(|e| (e.id, !e.favorite));
+            if let Some((id, new_fav)) = info {
+                if let Some(ref vault) = app.vault {
+                    let updates = sifr_core::EntryUpdate {
+                        title: None,
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: None,
+                        totp_secret: None,
+                        category_id: None,
+                        favorite: Some(new_fav),
+                    };
+                    match vault.update_entry(id, updates) {
+                        Ok(_) => app.refresh_entries(),
+                        Err(e) => app.set_error(&format!("Failed: {}", e)),
+                    }
+                }
             }
         }
         _ => {}
