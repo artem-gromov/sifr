@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod input;
 mod theme_bridge;
 mod ui;
@@ -79,6 +80,7 @@ fn main() -> Result<()> {
             match sifr_core::Vault::create(&path, &password) {
                 Ok(vault) => {
                     println!("Vault created at: {path}");
+                    config::save_last_vault(&path);
                     // Launch TUI with vault already unlocked
                     run_tui_inner(Some(path), Some(vault))?;
                 }
@@ -106,8 +108,9 @@ fn main() -> Result<()> {
             println!("{}", &*password);
         }
         None => {
-            // Bare `sifr` → vault picker
-            run_tui(None)?;
+            // Bare `sifr` → last vault if available, otherwise picker
+            let last = config::load_last_vault();
+            run_tui(last)?;
         }
     }
 

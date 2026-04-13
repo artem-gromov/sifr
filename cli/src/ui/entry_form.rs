@@ -33,11 +33,16 @@ pub fn draw(f: &mut Frame, app: &App) {
         let is_focused = i == app.form_focused;
         let label_style = if is_focused { tb.accent() } else { tb.muted() };
 
-        let display_value: String = if field.secret && !app.form_password_visible {
+        let mut display_value: String = if field.secret && !app.form_password_visible {
             "\u{2022}".repeat(field.value.len())
         } else {
             field.value.clone()
         };
+
+        // Add cursor to focused field
+        if is_focused {
+            display_value.push('\u{258c}'); // ▌
+        }
 
         // Field input box: [value               ]
         let box_inner_width = 36usize;
