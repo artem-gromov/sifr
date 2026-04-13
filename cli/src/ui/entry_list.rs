@@ -70,7 +70,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
     // Compute column boundaries for double-click detection BEFORE borrowing app
     let border_x = area.x + 1;
     let available = area.width.saturating_sub(2);
-    let fixed: u16 = 2 + 20 + 10 + 22 + 10;
+    let fixed: u16 = 2 + 20 + 10 + 22 + 3;
     let username_w = available.saturating_sub(fixed).max(16);
     app.column_boundaries = vec![
         border_x,
@@ -89,16 +89,23 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         .enumerate()
         .map(|(i, e)| {
             let marker = if i == app.selected_index { ">" } else { " " };
+            let fav = if e.favorite { "\u{2605}" } else { " " };
             let cells = vec![
                 Cell::from(Span::styled(marker, tb.accent())),
                 Cell::from(Span::styled(e.title.clone(), tb.text())),
-                Cell::from(Span::styled(e.username.clone(), tb.muted())),
+                Cell::from(Span::styled(
+                    e.username.as_deref().unwrap_or("").to_string(),
+                    tb.muted(),
+                )),
                 Cell::from(Span::styled(
                     "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
                     tb.subtext(),
                 )),
-                Cell::from(Span::styled(e.url.clone(), tb.subtext())),
-                Cell::from(Span::styled(e.category.clone(), tb.blue())),
+                Cell::from(Span::styled(
+                    e.url.as_deref().unwrap_or("").to_string(),
+                    tb.subtext(),
+                )),
+                Cell::from(Span::styled(fav.to_string(), tb.accent())),
             ];
             let style = if i == app.selected_index {
                 tb.selection()
@@ -115,7 +122,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         Constraint::Min(16),    // Username (flexible)
         Constraint::Length(10), // Password
         Constraint::Length(22), // URL
-        Constraint::Length(10), // Category
+        Constraint::Length(3),  // Fav
     ];
 
     let header = Row::new(vec![
@@ -124,7 +131,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         Cell::from(Span::styled("Username", tb.accent())),
         Cell::from(Span::styled("Password", tb.accent())),
         Cell::from(Span::styled("URL", tb.accent())),
-        Cell::from(Span::styled("Category", tb.accent())),
+        Cell::from(Span::styled("Fav", tb.accent())),
     ])
     .style(tb.surface());
 

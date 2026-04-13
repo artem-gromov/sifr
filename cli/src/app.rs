@@ -11,20 +11,17 @@ pub enum Screen {
     Help,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnlockMode {
+    Open,
+    Create,
+}
+
 #[derive(Debug, Clone)]
 pub struct PickerEntry {
     pub name: String,
     pub is_dir: bool,
     pub is_vault: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct MockEntry {
-    pub title: String,
-    pub username: String,
-    pub password: String,
-    pub url: String,
-    pub category: String,
 }
 
 pub struct App {
@@ -34,10 +31,17 @@ pub struct App {
     pub search_query: String,
     pub search_active: bool,
     pub selected_index: usize,
-    pub entries: Vec<MockEntry>,
+    pub vault: Option<sifr_core::Vault>,
+    pub entries: Vec<sifr_core::models::Entry>,
+    pub error_message: Option<String>,
+    pub error_clear_at: Option<std::time::Instant>,
+    pub started_from_picker: bool,
     pub theme: ThemeRegistry,
     pub password_input: String,
+    pub password_confirm: String,
+    pub confirm_active: bool,
     pub password_visible: bool,
+    pub unlock_mode: UnlockMode,
     pub clipboard_notification: Option<String>,
     pub clipboard_clear_at: Option<std::time::Instant>,
     // Double-click tracking
@@ -52,65 +56,6 @@ pub struct App {
 
 impl App {
     pub fn new(vault_path: String) -> Self {
-        let entries = vec![
-            MockEntry {
-                title: "GitHub".into(),
-                username: "john@example.com".into(),
-                password: "Gh$ecure!2024".into(),
-                url: "github.com".into(),
-                category: "Dev".into(),
-            },
-            MockEntry {
-                title: "AWS Console".into(),
-                username: "admin@example.com".into(),
-                password: "AwS#root99!".into(),
-                url: "aws.amazon.com".into(),
-                category: "Cloud".into(),
-            },
-            MockEntry {
-                title: "Gmail".into(),
-                username: "john@gmail.com".into(),
-                password: "gM@il_pass42".into(),
-                url: "mail.google.com".into(),
-                category: "Email".into(),
-            },
-            MockEntry {
-                title: "Netflix".into(),
-                username: "john@gmail.com".into(),
-                password: "Nf!ixStream8".into(),
-                url: "netflix.com".into(),
-                category: "Media".into(),
-            },
-            MockEntry {
-                title: "Cloudflare".into(),
-                username: "admin@example.com".into(),
-                password: "Cf#dns!2024".into(),
-                url: "cloudflare.com".into(),
-                category: "Cloud".into(),
-            },
-            MockEntry {
-                title: "Figma".into(),
-                username: "john@example.com".into(),
-                password: "F1gma$D3sign".into(),
-                url: "figma.com".into(),
-                category: "Design".into(),
-            },
-            MockEntry {
-                title: "Spotify".into(),
-                username: "john@gmail.com".into(),
-                password: "Sp0t!fyBeat$".into(),
-                url: "spotify.com".into(),
-                category: "Media".into(),
-            },
-            MockEntry {
-                title: "Vercel".into(),
-                username: "john@example.com".into(),
-                password: "V3rc3l!D3ploy".into(),
-                url: "vercel.com".into(),
-                category: "Dev".into(),
-            },
-        ];
-
         let picker_path = std::env::current_dir().unwrap_or_default();
         let mut app = Self {
             screen: Screen::Unlock,
@@ -119,10 +64,17 @@ impl App {
             search_query: String::new(),
             search_active: false,
             selected_index: 0,
-            entries,
+            vault: None,
+            entries: Vec::new(),
+            error_message: None,
+            error_clear_at: None,
+            started_from_picker: false,
             theme: ThemeRegistry::new(),
             password_input: String::new(),
+            password_confirm: String::new(),
+            confirm_active: false,
             password_visible: false,
+            unlock_mode: UnlockMode::Open,
             clipboard_notification: None,
             clipboard_clear_at: None,
             last_click: None,
@@ -134,6 +86,20 @@ impl App {
         };
         app.refresh_picker();
         app
+    }
+
+    pub fn refresh_entries(&mut self) {
+        if let Some(ref vault) = self.vault {
+            match vault.list_entries() {
+                Ok(list) => self.entries = list,
+                Err(e) => self.set_error(&format!("Failed to load entries: {}", e)),
+            }
+        }
+    }
+
+    pub fn set_error(&mut self, msg: &str) {
+        self.error_message = Some(msg.to_string());
+        self.error_clear_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(5));
     }
 
     /// Reads `picker_path` and populates `picker_entries`.
@@ -213,6 +179,7 @@ impl App {
         } else if entry.is_vault {
             let vault_path = self.picker_path.join(&entry.name);
             self.vault_path = vault_path.to_string_lossy().to_string();
+            self.unlock_mode = UnlockMode::Open;
             self.screen = Screen::Unlock;
         }
     }
@@ -234,7 +201,7 @@ impl App {
         }
     }
 
-    pub fn filtered_entries(&self) -> Vec<&MockEntry> {
+    pub fn filtered_entries(&self) -> Vec<&sifr_core::models::Entry> {
         if self.search_query.is_empty() {
             self.entries.iter().collect()
         } else {
@@ -243,9 +210,12 @@ impl App {
                 .iter()
                 .filter(|e| {
                     e.title.to_lowercase().contains(&q)
-                        || e.url.to_lowercase().contains(&q)
-                        || e.username.to_lowercase().contains(&q)
-                        || e.category.to_lowercase().contains(&q)
+                        || e.username
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&q)
+                        || e.url.as_deref().unwrap_or("").to_lowercase().contains(&q)
                 })
                 .collect()
         }

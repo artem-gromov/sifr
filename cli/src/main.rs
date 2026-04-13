@@ -61,8 +61,28 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::New { path } => {
-            println!("Creating new vault at: {path}");
-            println!("(vault creation will be implemented in a future release)");
+            use std::io::Write;
+            print!("Master password: ");
+            std::io::stdout().flush()?;
+            let password = rpassword::read_password()?;
+            print!("Confirm password: ");
+            std::io::stdout().flush()?;
+            let confirm = rpassword::read_password()?;
+            if password != confirm {
+                eprintln!("Passwords do not match.");
+                std::process::exit(1);
+            }
+            if password.is_empty() {
+                eprintln!("Password cannot be empty.");
+                std::process::exit(1);
+            }
+            match sifr_core::Vault::create(&path, &password) {
+                Ok(_) => println!("Vault created at: {path}"),
+                Err(e) => {
+                    eprintln!("Failed to create vault: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Open { path } => {
             run_tui(path)?;
@@ -107,7 +127,9 @@ fn run_tui(vault_path: Option<String>) -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let path = vault_path.unwrap_or_default();
+    let started_from_picker = path.is_empty();
     let mut app = App::new(path.clone());
+    app.started_from_picker = started_from_picker;
     if path.is_empty() {
         app.screen = app::Screen::VaultPicker;
     }
@@ -123,6 +145,7 @@ fn run_tui(vault_path: Option<String>) -> Result<()> {
 
     // Zeroize password input before drop
     zeroize::Zeroize::zeroize(&mut app.password_input);
+    zeroize::Zeroize::zeroize(&mut app.password_confirm);
 
     // Restore terminal
     restore_terminal();
@@ -151,6 +174,14 @@ fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut 
                 }
                 app.clipboard_clear_at = None;
                 app.clipboard_notification = None;
+            }
+        }
+
+        // Check error auto-clear timer
+        if let Some(clear_at) = app.error_clear_at {
+            if std::time::Instant::now() >= clear_at {
+                app.error_message = None;
+                app.error_clear_at = None;
             }
         }
 
