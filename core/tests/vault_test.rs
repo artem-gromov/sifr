@@ -225,3 +225,23 @@ fn test_password_generator() {
     let pw_one = generate_password(1, false, false, false);
     assert_eq!(pw_one.len(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Password length validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_vault_create_short_password() {
+    let dir = TempDir::new().unwrap();
+    let path = temp_vault_path(&dir);
+    let result = Vault::create(&path, "short");
+    assert!(matches!(result, Err(VaultError::PasswordTooShort(8))));
+}
+
+#[test]
+fn test_vault_create_minimum_password() {
+    let dir = TempDir::new().unwrap();
+    let path = temp_vault_path(&dir);
+    let vault = Vault::create(&path, "exactly8");
+    assert!(vault.is_ok());
+}

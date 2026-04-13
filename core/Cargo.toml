@@ -14,7 +14,6 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [dependencies]
 rusqlite.workspace = true
 argon2.workspace = true
-aes-gcm.workspace = true
 rand.workspace = true
 zeroize.workspace = true
 serde.workspace = true

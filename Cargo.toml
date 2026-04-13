@@ -18,7 +18,6 @@ rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
 
 # Crypto
 argon2 = "0.5"
-aes-gcm = "0.10"
 rand = "0.8"
 zeroize = { version = "1.7", features = ["derive"] }
 
@@ -30,9 +29,6 @@ toml = "0.8"
 # Error handling
 thiserror = "1"
 anyhow = "1"
-
-# Async (for future IPC)
-tokio = { version = "1", features = ["full"] }
 
 # UniFFI (Swift/Kotlin bindings)
 uniffi = "0.27"

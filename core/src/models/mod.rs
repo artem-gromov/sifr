@@ -6,9 +6,11 @@ pub struct Entry {
     pub id: i64,
     pub title: String,
     pub username: Option<String>,
+    #[serde(skip)]
     pub password: Option<String>,
     pub url: Option<String>,
     pub notes: Option<String>,
+    #[serde(skip)]
     pub totp_secret: Option<String>,
     pub category_id: Option<i64>,
     pub favorite: bool,
@@ -50,9 +52,11 @@ impl Drop for Entry {
 pub struct NewEntry {
     pub title: String,
     pub username: Option<String>,
+    #[serde(skip)]
     pub password: Option<String>,
     pub url: Option<String>,
     pub notes: Option<String>,
+    #[serde(skip)]
     pub totp_secret: Option<String>,
     pub category_id: Option<i64>,
 }
@@ -88,9 +92,11 @@ impl Drop for NewEntry {
 pub struct EntryUpdate {
     pub title: Option<String>,
     pub username: Option<Option<String>>,
+    #[serde(skip)]
     pub password: Option<Option<String>>,
     pub url: Option<Option<String>>,
     pub notes: Option<Option<String>>,
+    #[serde(skip)]
     pub totp_secret: Option<Option<String>>,
     pub category_id: Option<Option<i64>>,
     pub favorite: Option<bool>,

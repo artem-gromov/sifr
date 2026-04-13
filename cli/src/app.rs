@@ -20,6 +20,14 @@ pub struct FormField {
     pub secret: bool,
 }
 
+impl Drop for FormField {
+    fn drop(&mut self) {
+        if self.secret {
+            zeroize::Zeroize::zeroize(&mut self.value);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnlockMode {
     Open,
@@ -46,8 +54,8 @@ pub struct App {
     pub error_clear_at: Option<std::time::Instant>,
     pub started_from_picker: bool,
     pub theme: ThemeRegistry,
-    pub password_input: String,
-    pub password_confirm: String,
+    pub password_input: zeroize::Zeroizing<String>,
+    pub password_confirm: zeroize::Zeroizing<String>,
     pub confirm_active: bool,
     pub password_visible: bool,
     pub unlock_mode: UnlockMode,
@@ -68,6 +76,8 @@ pub struct App {
     pub form_editing_id: Option<i64>,
     pub form_password_visible: bool,
     pub confirm_delete: Option<i64>,
+    pub filtered_indices: Vec<usize>,
+    pub entry_scroll_offset: usize,
 }
 
 impl App {
@@ -86,8 +96,8 @@ impl App {
             error_clear_at: None,
             started_from_picker: false,
             theme: ThemeRegistry::new(),
-            password_input: String::new(),
-            password_confirm: String::new(),
+            password_input: zeroize::Zeroizing::new(String::new()),
+            password_confirm: zeroize::Zeroizing::new(String::new()),
             confirm_active: false,
             password_visible: false,
             unlock_mode: UnlockMode::Open,
@@ -105,6 +115,8 @@ impl App {
             form_editing_id: None,
             form_password_visible: false,
             confirm_delete: None,
+            filtered_indices: Vec::new(),
+            entry_scroll_offset: 0,
         };
         app.refresh_picker();
         app
@@ -116,6 +128,31 @@ impl App {
                 Ok(list) => self.entries = list,
                 Err(e) => self.set_error(&format!("Failed to load entries: {}", e)),
             }
+        }
+        self.refilter();
+    }
+
+    pub fn refilter(&mut self) {
+        self.entry_scroll_offset = 0;
+        if self.search_query.is_empty() {
+            self.filtered_indices = (0..self.entries.len()).collect();
+        } else {
+            let q = self.search_query.to_lowercase();
+            self.filtered_indices = self
+                .entries
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| {
+                    e.title.to_lowercase().contains(&q)
+                        || e.username
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&q)
+                        || e.url.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                })
+                .map(|(i, _)| i)
+                .collect();
         }
     }
 
@@ -224,23 +261,10 @@ impl App {
     }
 
     pub fn filtered_entries(&self) -> Vec<&sifr_core::models::Entry> {
-        if self.search_query.is_empty() {
-            self.entries.iter().collect()
-        } else {
-            let q = self.search_query.to_lowercase();
-            self.entries
-                .iter()
-                .filter(|e| {
-                    e.title.to_lowercase().contains(&q)
-                        || e.username
-                            .as_deref()
-                            .unwrap_or("")
-                            .to_lowercase()
-                            .contains(&q)
-                        || e.url.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                })
-                .collect()
-        }
+        self.filtered_indices
+            .iter()
+            .filter_map(|&i| self.entries.get(i))
+            .collect()
     }
 
     /// Returns the appropriate `ThemeBridge` for the current theme state.

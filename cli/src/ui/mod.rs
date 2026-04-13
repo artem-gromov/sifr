@@ -5,13 +5,33 @@ pub mod unlock;
 pub mod vault_picker;
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
 
 use crate::app::{App, Screen};
+
+pub fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(r.height.saturating_sub(height) / 2),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(r.width.saturating_sub(width) / 2),
+            Constraint::Length(width),
+            Constraint::Min(0),
+        ])
+        .split(popup_layout[1])[1]
+}
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     match app.screen {
