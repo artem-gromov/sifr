@@ -3,12 +3,18 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use crate::app::{App, Screen, UnlockMode};
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
+    // Delete confirmation overlay takes priority
+    if app.confirm_delete.is_some() {
+        handle_confirm_delete(app, key);
+        return;
+    }
     match app.screen {
         Screen::VaultPicker => handle_vault_picker(app, key),
         Screen::Unlock => handle_unlock(app, key),
         Screen::EntryList => handle_entry_list(app, key),
         Screen::EntryDetail => handle_entry_detail(app, key),
         Screen::Help => handle_help(app, key),
+        Screen::AddEntry | Screen::EditEntry => handle_form(app, key),
     }
 }
 
@@ -336,7 +342,13 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             app.search_active = true;
         }
         KeyCode::Char('a') => {
-            // Placeholder: add entry
+            app.init_add_form();
+        }
+        KeyCode::Char('d') => {
+            if let Some(e) = app.filtered_entries().get(app.selected_index) {
+                let id = e.id;
+                app.confirm_delete = Some(id);
+            }
         }
         KeyCode::Char('?') => {
             app.screen = Screen::Help;
@@ -380,6 +392,22 @@ fn handle_entry_detail(app: &mut App, key: KeyEvent) {
                 app.copy_to_clipboard(&username);
             }
         }
+        KeyCode::Char('e') => {
+            // Get entry id first to avoid borrow conflict
+            let entry_id = app.filtered_entries().get(app.selected_index).map(|e| e.id);
+            if let Some(id) = entry_id {
+                // Find the entry in app.entries by id and clone it
+                if let Some(entry) = app.entries.iter().find(|e| e.id == id).cloned() {
+                    app.init_edit_form(&entry);
+                }
+            }
+        }
+        KeyCode::Char('d') => {
+            if let Some(e) = app.filtered_entries().get(app.selected_index) {
+                let id = e.id;
+                app.confirm_delete = Some(id);
+            }
+        }
         _ => {}
     }
 }
@@ -391,6 +419,191 @@ fn handle_help(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.running = false;
+        }
+        _ => {}
+    }
+}
+
+fn non_empty(s: &str) -> Option<String> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
+}
+
+fn handle_form(app: &mut App, key: KeyEvent) {
+    let field_count = app.form_fields.len();
+
+    match key.code {
+        KeyCode::Esc => {
+            app.zeroize_form_password();
+            app.form_fields.clear();
+            app.screen = Screen::EntryList;
+        }
+        KeyCode::Tab | KeyCode::Down => {
+            app.form_focused = (app.form_focused + 1) % field_count;
+        }
+        KeyCode::BackTab | KeyCode::Up => {
+            if app.form_focused == 0 {
+                app.form_focused = field_count - 1;
+            } else {
+                app.form_focused -= 1;
+            }
+        }
+        KeyCode::Backspace => {
+            if let Some(field) = app.form_fields.get_mut(app.form_focused) {
+                field.value.pop();
+            }
+        }
+        KeyCode::Char(c) => {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match c {
+                    'c' => app.running = false,
+                    'v' => {
+                        app.form_password_visible = !app.form_password_visible;
+                    }
+                    'g' => {
+                        // Generate password only when focused on the password field (index 2)
+                        if app.form_focused == 2 {
+                            let pwd = sifr_core::crypto::generate_password(16, true, true, true);
+                            if let Some(field) = app.form_fields.get_mut(2) {
+                                field.value = pwd.as_str().to_string();
+                            }
+                        }
+                    }
+                    's' => {
+                        submit_form(app);
+                    }
+                    _ => {}
+                }
+            } else {
+                // Clear error when user types
+                app.error_message = None;
+                app.error_clear_at = None;
+                if let Some(field) = app.form_fields.get_mut(app.form_focused) {
+                    field.value.push(c);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn submit_form(app: &mut App) {
+    // Validate required fields
+    let title = app
+        .form_fields
+        .first()
+        .map(|f| f.value.trim().to_string())
+        .unwrap_or_default();
+    if title.is_empty() {
+        app.set_error("Title is required");
+        return;
+    }
+
+    let username = app
+        .form_fields
+        .get(1)
+        .map(|f| non_empty(f.value.trim()))
+        .unwrap_or(None);
+    let password = app
+        .form_fields
+        .get(2)
+        .map(|f| non_empty(f.value.trim()))
+        .unwrap_or(None);
+    let url = app
+        .form_fields
+        .get(3)
+        .map(|f| non_empty(f.value.trim()))
+        .unwrap_or(None);
+    let notes = app
+        .form_fields
+        .get(4)
+        .map(|f| non_empty(f.value.trim()))
+        .unwrap_or(None);
+
+    if let Some(editing_id) = app.form_editing_id {
+        // Edit mode: build EntryUpdate
+        let updates = sifr_core::EntryUpdate {
+            title: Some(title),
+            username: Some(username),
+            password: Some(password),
+            url: Some(url),
+            notes: Some(notes),
+            totp_secret: None,
+            category_id: None,
+            favorite: None,
+        };
+        if let Some(ref vault) = app.vault {
+            match vault.update_entry(editing_id, updates) {
+                Ok(_) => {
+                    app.zeroize_form_password();
+                    app.form_fields.clear();
+                    app.form_editing_id = None;
+                    app.refresh_entries();
+                    app.screen = Screen::EntryList;
+                }
+                Err(e) => {
+                    app.set_error(&format!("Update failed: {}", e));
+                }
+            }
+        }
+    } else {
+        // Add mode
+        let new = sifr_core::NewEntry {
+            title,
+            username,
+            password,
+            url,
+            notes,
+            totp_secret: None,
+            category_id: None,
+        };
+        if let Some(ref vault) = app.vault {
+            match vault.add_entry(&new) {
+                Ok(_) => {
+                    app.zeroize_form_password();
+                    app.form_fields.clear();
+                    app.refresh_entries();
+                    app.screen = Screen::EntryList;
+                }
+                Err(e) => {
+                    app.set_error(&format!("Add failed: {}", e));
+                }
+            }
+        }
+    }
+}
+
+fn handle_confirm_delete(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            if let Some(id) = app.confirm_delete.take() {
+                if let Some(ref vault) = app.vault {
+                    match vault.delete_entry(id) {
+                        Ok(()) => {
+                            app.refresh_entries();
+                            // If we were on detail screen, go back to list
+                            if app.screen == Screen::EntryDetail {
+                                app.screen = Screen::EntryList;
+                            }
+                            // Clamp selected index
+                            let count = app.entries.len();
+                            if app.selected_index >= count && count > 0 {
+                                app.selected_index = count - 1;
+                            }
+                        }
+                        Err(e) => {
+                            app.set_error(&format!("Delete failed: {}", e));
+                        }
+                    }
+                }
+                app.confirm_delete = None;
+            }
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.confirm_delete = None;
         }
         _ => {}
     }

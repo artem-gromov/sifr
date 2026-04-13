@@ -1,3 +1,4 @@
+pub mod entry_form;
 pub mod entry_list;
 pub mod status_bar;
 pub mod unlock;
@@ -19,6 +20,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Screen::EntryList => entry_list::draw(f, app),
         Screen::EntryDetail => draw_entry_detail(f, app),
         Screen::Help => draw_help(f, app),
+        Screen::AddEntry | Screen::EditEntry => entry_form::draw(f, app),
+    }
+
+    // Delete confirmation overlay (drawn on top of any screen)
+    if app.confirm_delete.is_some() {
+        draw_delete_confirm(f, app);
     }
 }
 
@@ -101,10 +108,18 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
             Span::styled(format_timestamp(e.updated_at), tb.subtext()),
         ]));
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "  y/c copy password  u copy username  Esc/q back",
-            tb.muted(),
-        )));
+        lines.push(Line::from(vec![
+            Span::styled("  y/c", tb.accent()),
+            Span::styled(" copy pw  ", tb.muted()),
+            Span::styled("u", tb.accent()),
+            Span::styled(" copy user  ", tb.muted()),
+            Span::styled("e", tb.accent()),
+            Span::styled(" edit  ", tb.muted()),
+            Span::styled("d", tb.accent()),
+            Span::styled(" delete  ", tb.muted()),
+            Span::styled("Esc/q", tb.accent()),
+            Span::styled(" back", tb.muted()),
+        ]));
         lines.push(Line::from(""));
         lines
     } else {
@@ -186,7 +201,23 @@ fn draw_help(f: &mut Frame, app: &App) {
         Line::from(Span::styled("  Actions", tb.accent())),
         Line::from(vec![
             Span::styled("    a          ", tb.text()),
-            Span::styled("Add new entry (coming soon)", tb.muted()),
+            Span::styled("Add new entry", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    e          ", tb.text()),
+            Span::styled("Edit entry (on detail)", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    d          ", tb.text()),
+            Span::styled("Delete entry", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    Ctrl+G     ", tb.text()),
+            Span::styled("Generate password (in form)", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    Ctrl+S     ", tb.text()),
+            Span::styled("Save form", tb.muted()),
         ]),
         Line::from(vec![
             Span::styled("    t          ", tb.text()),
@@ -215,6 +246,69 @@ fn draw_help(f: &mut Frame, app: &App) {
 
     let para = Paragraph::new(content).block(block);
     f.render_widget(para, modal_area);
+}
+
+fn draw_delete_confirm(f: &mut Frame, app: &App) {
+    let tb = app.theme_bridge();
+    let full = f.size();
+
+    // Find the entry title for the confirmation message
+    let title_str = if let Some(id) = app.confirm_delete {
+        app.entries
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| e.title.clone())
+            .unwrap_or_else(|| "this entry".to_string())
+    } else {
+        "this entry".to_string()
+    };
+
+    let modal_width = 44u16;
+    let modal_height = 5u16;
+    let area = {
+        let popup_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(full.height.saturating_sub(modal_height) / 2),
+                Constraint::Length(modal_height),
+                Constraint::Min(0),
+            ])
+            .split(full);
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(full.width.saturating_sub(modal_width) / 2),
+                Constraint::Length(modal_width),
+                Constraint::Min(0),
+            ])
+            .split(popup_layout[1])[1]
+    };
+
+    f.render_widget(Clear, area);
+
+    let msg = format!("  Delete \"{}\"?", title_str);
+    let content = vec![
+        Line::from(""),
+        Line::from(Span::styled(msg, tb.text())),
+        Line::from(vec![
+            Span::styled("  ", tb.muted()),
+            Span::styled("y", tb.red()),
+            Span::styled(" yes  ", tb.muted()),
+            Span::styled("n / Esc", tb.accent()),
+            Span::styled(" cancel", tb.muted()),
+        ]),
+    ];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(tb.red())
+        .title(Span::styled(" Confirm Delete ", tb.red()))
+        .title_alignment(Alignment::Center)
+        .style(tb.surface());
+
+    let para = Paragraph::new(content).block(block);
+    f.render_widget(para, area);
 }
 
 fn centered_rect_pct(
