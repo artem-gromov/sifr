@@ -7,7 +7,6 @@ pub enum Screen {
     VaultPicker,
     Unlock,
     EntryList,
-    EntryDetail,
     Help,
     AddEntry,
     EditEntry,
