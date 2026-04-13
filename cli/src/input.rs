@@ -12,7 +12,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         Screen::VaultPicker => handle_vault_picker(app, key),
         Screen::Unlock => handle_unlock(app, key),
         Screen::EntryList => handle_entry_list(app, key),
-        Screen::EntryDetail => handle_entry_detail(app, key),
         Screen::Help => handle_help(app, key),
         Screen::AddEntry | Screen::EditEntry => handle_form(app, key),
     }
@@ -50,7 +49,23 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     if row >= 4 {
                         let index = app.picker_scroll_offset + (row - 4);
                         if index < app.picker_entries.len() {
+                            // Double-click detection for picker
+                            let now = std::time::Instant::now();
+                            let is_double = if let Some((last_time, _, last_row)) = app.last_click {
+                                now.duration_since(last_time).as_millis() < 500
+                                    && last_row == mouse.row
+                            } else {
+                                false
+                            };
+
                             app.picker_selected = index;
+
+                            if is_double {
+                                app.picker_enter();
+                                app.last_click = None;
+                            } else {
+                                app.last_click = Some((now, mouse.column, mouse.row));
+                            }
                         }
                     }
                 }
@@ -58,7 +73,10 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     // Layout: row 0-2 = search bar, row 3 = table header, row 4+ = entries
                     let row = mouse.row as usize;
                     let col = mouse.column;
-                    if row >= 4 {
+                    if row < 3 {
+                        // Click on search bar → activate search
+                        app.search_active = true;
+                    } else if row >= 4 {
                         let index = row - 4;
                         let count = app.filtered_entries().len();
                         if count > 0 && index < count {
@@ -80,8 +98,8 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                 let clicked_col = determine_column(col, &app.column_boundaries);
                                 match clicked_col {
                                     1 => {
-                                        // Title → open detail
-                                        app.screen = Screen::EntryDetail;
+                                        // Title → edit entry
+                                        edit_selected(app);
                                     }
                                     2 => {
                                         // Username → copy
@@ -112,7 +130,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                         }
                     }
                 }
-                Screen::EntryDetail | Screen::Help => {
+                Screen::Help => {
                     // Click outside modal → go back to EntryList
                     app.screen = Screen::EntryList;
                 }
@@ -342,17 +360,24 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn edit_selected(app: &mut App) {
+    let entry_id = app.filtered_entries().get(app.selected_index).map(|e| e.id);
+    if let Some(id) = entry_id {
+        if let Some(entry) = app.entries.iter().find(|e| e.id == id).cloned() {
+            app.init_edit_form(&entry);
+        }
+    }
+}
+
 fn handle_entry_list(app: &mut App, key: KeyEvent) {
     if app.search_active {
         match key.code {
             KeyCode::Esc => {
+                // Unfocus search but keep the filter text
                 app.search_active = false;
-                app.search_query.clear();
-                app.selected_index = 0;
             }
             KeyCode::Enter => {
                 app.search_active = false;
-                app.selected_index = 0;
             }
             KeyCode::Backspace => {
                 app.search_query.pop();
@@ -368,8 +393,17 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
     }
 
     match key.code {
-        KeyCode::Char('q') | KeyCode::Esc => {
+        KeyCode::Char('q') => {
             app.running = false;
+        }
+        KeyCode::Esc => {
+            if !app.search_query.is_empty() {
+                // Clear search filter
+                app.search_query.clear();
+                app.selected_index = 0;
+            } else {
+                app.running = false;
+            }
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.running = false;
@@ -385,8 +419,8 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
                 app.selected_index -= 1;
             }
         }
-        KeyCode::Enter => {
-            app.screen = Screen::EntryDetail;
+        KeyCode::Enter | KeyCode::Char('e') => {
+            edit_selected(app);
         }
         KeyCode::Char('/') => {
             app.search_active = true;
@@ -454,70 +488,6 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
                 app.screen = Screen::VaultPicker;
             } else {
                 app.screen = Screen::Unlock;
-            }
-        }
-        _ => {}
-    }
-}
-
-fn handle_entry_detail(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => {
-            app.screen = Screen::EntryList;
-        }
-        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.running = false;
-        }
-        KeyCode::Char('y') | KeyCode::Char('c') => {
-            if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let password = e.password.as_deref().unwrap_or("").to_string();
-                app.copy_to_clipboard(&password);
-            }
-        }
-        KeyCode::Char('u') => {
-            if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let username = e.username.as_deref().unwrap_or("").to_string();
-                app.copy_to_clipboard(&username);
-            }
-        }
-        KeyCode::Char('e') => {
-            // Get entry id first to avoid borrow conflict
-            let entry_id = app.filtered_entries().get(app.selected_index).map(|e| e.id);
-            if let Some(id) = entry_id {
-                // Find the entry in app.entries by id and clone it
-                if let Some(entry) = app.entries.iter().find(|e| e.id == id).cloned() {
-                    app.init_edit_form(&entry);
-                }
-            }
-        }
-        KeyCode::Char('d') => {
-            if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let id = e.id;
-                app.confirm_delete = Some(id);
-            }
-        }
-        KeyCode::Char('f') => {
-            let info = app
-                .filtered_entries()
-                .get(app.selected_index)
-                .map(|e| (e.id, !e.favorite));
-            if let Some((id, new_fav)) = info {
-                if let Some(ref vault) = app.vault {
-                    let updates = sifr_core::EntryUpdate {
-                        title: None,
-                        username: None,
-                        password: None,
-                        url: None,
-                        notes: None,
-                        totp_secret: None,
-                        category_id: None,
-                        favorite: Some(new_fav),
-                    };
-                    match vault.update_entry(id, updates) {
-                        Ok(_) => app.refresh_entries(),
-                        Err(e) => app.set_error(&format!("Failed: {}", e)),
-                    }
-                }
             }
         }
         _ => {}
@@ -696,10 +666,6 @@ fn handle_confirm_delete(app: &mut App, key: KeyEvent) {
                     match vault.delete_entry(id) {
                         Ok(()) => {
                             app.refresh_entries();
-                            // If we were on detail screen, go back to list
-                            if app.screen == Screen::EntryDetail {
-                                app.screen = Screen::EntryList;
-                            }
                             // Clamp selected index
                             let count = app.entries.len();
                             if app.selected_index >= count && count > 0 {

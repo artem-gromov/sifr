@@ -18,7 +18,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Screen::VaultPicker => vault_picker::draw(f, app),
         Screen::Unlock => unlock::draw(f, app),
         Screen::EntryList => entry_list::draw(f, app),
-        Screen::EntryDetail => draw_entry_detail(f, app),
         Screen::Help => draw_help(f, app),
         Screen::AddEntry | Screen::EditEntry => entry_form::draw(f, app),
     }
@@ -27,117 +26,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.confirm_delete.is_some() {
         draw_delete_confirm(f, app);
     }
-}
-
-fn format_timestamp(ts: i64) -> String {
-    // Simple human-readable format without external dependencies
-    // Show as YYYY-MM-DD using basic arithmetic
-    if ts <= 0 {
-        return "—".to_string();
-    }
-    // Days since Unix epoch
-    let days = ts / 86400;
-    // Gregorian calendar calculation
-    let z = days + 719468;
-    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!("{:04}-{:02}-{:02}", y, m, d)
-}
-
-fn draw_entry_detail(f: &mut Frame, app: &App) {
-    let tb = app.theme_bridge();
-    let full = f.size();
-
-    let bg = Block::default().style(tb.bg());
-    f.render_widget(bg, full);
-
-    let entries = app.filtered_entries();
-    let entry = entries.get(app.selected_index);
-
-    let modal_area = centered_rect_pct(60, 70, full);
-    f.render_widget(Clear, modal_area);
-
-    let content = if let Some(e) = entry {
-        let fav_char = if e.favorite { "\u{2605}" } else { "\u{2606}" };
-        let mut lines = vec![
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Title:    ", tb.muted()),
-                Span::styled(e.title.clone(), tb.text()),
-                Span::styled(format!("  {}", fav_char), tb.accent()),
-            ]),
-            Line::from(vec![
-                Span::styled("  Username: ", tb.muted()),
-                Span::styled(e.username.as_deref().unwrap_or("—").to_string(), tb.text()),
-            ]),
-            Line::from(vec![
-                Span::styled("  Password: ", tb.muted()),
-                Span::styled(
-                    "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
-                    tb.accent(),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("  URL:      ", tb.muted()),
-                Span::styled(e.url.as_deref().unwrap_or("—").to_string(), tb.blue()),
-            ]),
-        ];
-
-        if let Some(ref notes) = e.notes {
-            if !notes.is_empty() {
-                lines.push(Line::from(vec![
-                    Span::styled("  Notes:    ", tb.muted()),
-                    Span::styled(notes.clone(), tb.text()),
-                ]));
-            }
-        }
-
-        lines.push(Line::from(vec![
-            Span::styled("  Created:  ", tb.muted()),
-            Span::styled(format_timestamp(e.created_at), tb.subtext()),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Updated:  ", tb.muted()),
-            Span::styled(format_timestamp(e.updated_at), tb.subtext()),
-        ]));
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("  y/c", tb.accent()),
-            Span::styled(" copy pw  ", tb.muted()),
-            Span::styled("u", tb.accent()),
-            Span::styled(" copy user  ", tb.muted()),
-            Span::styled("f", tb.accent()),
-            Span::styled(" toggle fav  ", tb.muted()),
-            Span::styled("e", tb.accent()),
-            Span::styled(" edit  ", tb.muted()),
-            Span::styled("d", tb.accent()),
-            Span::styled(" delete  ", tb.muted()),
-            Span::styled("Esc/q", tb.accent()),
-            Span::styled(" back", tb.muted()),
-        ]));
-        lines.push(Line::from(""));
-        lines
-    } else {
-        vec![Line::from(Span::styled("  No entry selected", tb.muted()))]
-    };
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(tb.border())
-        .title(Span::styled(" Entry Detail ", tb.title()))
-        .title_alignment(Alignment::Center)
-        .style(tb.surface());
-
-    let para = Paragraph::new(content).block(block);
-    f.render_widget(para, modal_area);
 }
 
 fn draw_help(f: &mut Frame, app: &App) {
@@ -162,8 +50,8 @@ fn draw_help(f: &mut Frame, app: &App) {
             Span::styled("Move selection up", tb.muted()),
         ]),
         Line::from(vec![
-            Span::styled("    Enter      ", tb.text()),
-            Span::styled("View entry detail", tb.muted()),
+            Span::styled("    Enter / e  ", tb.text()),
+            Span::styled("Edit selected entry", tb.muted()),
         ]),
         Line::from(""),
         Line::from(Span::styled("  Search", tb.accent())),
@@ -192,8 +80,12 @@ fn draw_help(f: &mut Frame, app: &App) {
             Span::styled("Select entry", tb.muted()),
         ]),
         Line::from(vec![
+            Span::styled("    Click bar  ", tb.text()),
+            Span::styled("Focus search", tb.muted()),
+        ]),
+        Line::from(vec![
             Span::styled("    Dbl-click  ", tb.text()),
-            Span::styled("Title=open, Username/Password=copy", tb.muted()),
+            Span::styled("Title=edit, Username/Password=copy", tb.muted()),
         ]),
         Line::from(vec![
             Span::styled("    Scroll     ", tb.text()),
@@ -204,10 +96,6 @@ fn draw_help(f: &mut Frame, app: &App) {
         Line::from(vec![
             Span::styled("    a          ", tb.text()),
             Span::styled("Add new entry", tb.muted()),
-        ]),
-        Line::from(vec![
-            Span::styled("    e          ", tb.text()),
-            Span::styled("Edit entry (on detail)", tb.muted()),
         ]),
         Line::from(vec![
             Span::styled("    d          ", tb.text()),
