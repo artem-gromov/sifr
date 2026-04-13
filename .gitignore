@@ -11,4 +11,5 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
-*.sifr.vscode/
+*.sifr
+.vscode/
