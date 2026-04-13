@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use crate::app::{App, Screen};
+use crate::app::{App, Screen, UnlockMode};
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     match app.screen {
@@ -82,7 +82,8 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                         if let Some(e) =
                                             app.filtered_entries().get(app.selected_index)
                                         {
-                                            let username = e.username.clone();
+                                            let username =
+                                                e.username.as_deref().unwrap_or("").to_string();
                                             app.copy_to_clipboard(&username);
                                         }
                                     }
@@ -91,7 +92,8 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                         if let Some(e) =
                                             app.filtered_entries().get(app.selected_index)
                                         {
-                                            let password = e.password.clone();
+                                            let password =
+                                                e.password.as_deref().unwrap_or("").to_string();
                                             app.copy_to_clipboard(&password);
                                         }
                                     }
@@ -159,6 +161,10 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
         KeyCode::Char('n') => {
             let vault_path = app.picker_path.join("new.sifr");
             app.vault_path = vault_path.to_string_lossy().to_string();
+            app.unlock_mode = UnlockMode::Create;
+            app.confirm_active = false;
+            app.password_input.clear();
+            app.password_confirm.clear();
             app.screen = Screen::Unlock;
         }
         KeyCode::Char('~') => {
@@ -185,22 +191,96 @@ fn home_dir() -> Option<std::path::PathBuf> {
 fn handle_unlock(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter => {
-            // Mock unlock: accept any password
-            app.screen = Screen::EntryList;
-            zeroize::Zeroize::zeroize(&mut app.password_input);
+            if app.unlock_mode == UnlockMode::Create {
+                if !app.confirm_active {
+                    // Move to confirm field
+                    if app.password_input.is_empty() {
+                        return;
+                    }
+                    app.confirm_active = true;
+                } else {
+                    // Second Enter: compare and create
+                    if app.password_input != app.password_confirm {
+                        app.set_error("Passwords don't match");
+                        zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                        app.confirm_active = false;
+                        return;
+                    }
+                    if app.password_input.is_empty() {
+                        app.set_error("Password cannot be empty");
+                        return;
+                    }
+                    let path = app.vault_path.clone();
+                    match sifr_core::Vault::create(&path, &app.password_input) {
+                        Ok(vault) => {
+                            app.vault = Some(vault);
+                            app.refresh_entries();
+                            zeroize::Zeroize::zeroize(&mut app.password_input);
+                            zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                            app.confirm_active = false;
+                            app.screen = Screen::EntryList;
+                        }
+                        Err(e) => {
+                            app.set_error(&e.to_string());
+                            zeroize::Zeroize::zeroize(&mut app.password_input);
+                            zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                            app.confirm_active = false;
+                        }
+                    }
+                }
+            } else {
+                // Open mode
+                if app.password_input.is_empty() {
+                    return;
+                }
+                let path = app.vault_path.clone();
+                match sifr_core::Vault::open(&path, &app.password_input) {
+                    Ok(vault) => {
+                        app.vault = Some(vault);
+                        app.refresh_entries();
+                        app.screen = Screen::EntryList;
+                    }
+                    Err(sifr_core::vault::VaultError::WrongPassword) => {
+                        app.set_error("Wrong password");
+                    }
+                    Err(e) => {
+                        app.set_error(&e.to_string());
+                    }
+                }
+                zeroize::Zeroize::zeroize(&mut app.password_input);
+            }
         }
         KeyCode::Char(c) => {
             if key.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' {
                 app.running = false;
             } else {
-                app.password_input.push(c);
+                // Clear error when user types
+                app.error_message = None;
+                app.error_clear_at = None;
+                if app.unlock_mode == UnlockMode::Create && app.confirm_active {
+                    app.password_confirm.push(c);
+                } else {
+                    app.password_input.push(c);
+                }
             }
         }
         KeyCode::Backspace => {
-            app.password_input.pop();
+            if app.unlock_mode == UnlockMode::Create && app.confirm_active {
+                app.password_confirm.pop();
+            } else {
+                app.password_input.pop();
+            }
         }
         KeyCode::Esc => {
-            app.running = false;
+            if app.unlock_mode == UnlockMode::Create && app.confirm_active {
+                // Go back to password field
+                app.confirm_active = false;
+                zeroize::Zeroize::zeroize(&mut app.password_confirm);
+            } else if app.started_from_picker {
+                app.screen = Screen::VaultPicker;
+            } else {
+                app.running = false;
+            }
         }
         _ => {}
     }
@@ -266,13 +346,13 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('y') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let password = e.password.clone();
+                let password = e.password.as_deref().unwrap_or("").to_string();
                 app.copy_to_clipboard(&password);
             }
         }
         KeyCode::Char('u') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let username = e.username.clone();
+                let username = e.username.as_deref().unwrap_or("").to_string();
                 app.copy_to_clipboard(&username);
             }
         }
@@ -290,13 +370,13 @@ fn handle_entry_detail(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('y') | KeyCode::Char('c') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let password = e.password.clone();
+                let password = e.password.as_deref().unwrap_or("").to_string();
                 app.copy_to_clipboard(&password);
             }
         }
         KeyCode::Char('u') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
-                let username = e.username.clone();
+                let username = e.username.as_deref().unwrap_or("").to_string();
                 app.copy_to_clipboard(&username);
             }
         }

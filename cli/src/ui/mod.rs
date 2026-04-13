@@ -22,6 +22,28 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
+fn format_timestamp(ts: i64) -> String {
+    // Simple human-readable format without external dependencies
+    // Show as YYYY-MM-DD using basic arithmetic
+    if ts <= 0 {
+        return "—".to_string();
+    }
+    // Days since Unix epoch
+    let days = ts / 86400;
+    // Gregorian calendar calculation
+    let z = days + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{:04}-{:02}-{:02}", y, m, d)
+}
+
 fn draw_entry_detail(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
     let full = f.size();
@@ -32,19 +54,21 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
     let entries = app.filtered_entries();
     let entry = entries.get(app.selected_index);
 
-    let modal_area = centered_rect_pct(60, 50, full);
+    let modal_area = centered_rect_pct(60, 70, full);
     f.render_widget(Clear, modal_area);
 
     let content = if let Some(e) = entry {
-        vec![
+        let fav_char = if e.favorite { "\u{2605}" } else { "\u{2606}" };
+        let mut lines = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled("  Title:    ", tb.muted()),
                 Span::styled(e.title.clone(), tb.text()),
+                Span::styled(format!("  {}", fav_char), tb.accent()),
             ]),
             Line::from(vec![
                 Span::styled("  Username: ", tb.muted()),
-                Span::styled(e.username.clone(), tb.text()),
+                Span::styled(e.username.as_deref().unwrap_or("—").to_string(), tb.text()),
             ]),
             Line::from(vec![
                 Span::styled("  Password: ", tb.muted()),
@@ -55,19 +79,34 @@ fn draw_entry_detail(f: &mut Frame, app: &App) {
             ]),
             Line::from(vec![
                 Span::styled("  URL:      ", tb.muted()),
-                Span::styled(e.url.clone(), tb.blue()),
+                Span::styled(e.url.as_deref().unwrap_or("—").to_string(), tb.blue()),
             ]),
-            Line::from(vec![
-                Span::styled("  Category: ", tb.muted()),
-                Span::styled(e.category.clone(), tb.purple()),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  y/c copy password  u copy username  Esc/q back",
-                tb.muted(),
-            )),
-            Line::from(""),
-        ]
+        ];
+
+        if let Some(ref notes) = e.notes {
+            if !notes.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled("  Notes:    ", tb.muted()),
+                    Span::styled(notes.clone(), tb.text()),
+                ]));
+            }
+        }
+
+        lines.push(Line::from(vec![
+            Span::styled("  Created:  ", tb.muted()),
+            Span::styled(format_timestamp(e.created_at), tb.subtext()),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Updated:  ", tb.muted()),
+            Span::styled(format_timestamp(e.updated_at), tb.subtext()),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  y/c copy password  u copy username  Esc/q back",
+            tb.muted(),
+        )));
+        lines.push(Line::from(""));
+        lines
     } else {
         vec![Line::from(Span::styled("  No entry selected", tb.muted()))]
     };
