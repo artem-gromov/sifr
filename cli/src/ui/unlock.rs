@@ -98,6 +98,8 @@ pub fn draw(f: &mut Frame, app: &App) {
             content.push(Line::from(vec![
                 Span::styled("  Enter", tb.accent()),
                 Span::styled(" confirm  ", tb.muted()),
+                Span::styled("Tab", tb.accent()),
+                Span::styled(" switch field  ", tb.muted()),
                 Span::styled("Esc", tb.accent()),
                 Span::styled(" back", tb.muted()),
             ]));

@@ -317,12 +317,15 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
             }
         }
         KeyCode::Tab => {
-            // Switch to vault picker to choose a different file
-            zeroize::Zeroize::zeroize(&mut app.password_input);
-            zeroize::Zeroize::zeroize(&mut app.password_confirm);
-            app.confirm_active = false;
-            app.started_from_picker = true;
-            app.screen = Screen::VaultPicker;
+            if app.unlock_mode == UnlockMode::Create {
+                // Toggle between password and confirm fields
+                app.confirm_active = !app.confirm_active;
+            } else {
+                // Open mode: switch to vault picker to choose a different file
+                zeroize::Zeroize::zeroize(&mut app.password_input);
+                app.started_from_picker = true;
+                app.screen = Screen::VaultPicker;
+            }
         }
         KeyCode::Esc => {
             if app.unlock_mode == UnlockMode::Create && app.confirm_active {
