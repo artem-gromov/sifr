@@ -7,11 +7,11 @@ use crate::models::{Entry, EntryUpdate, NewEntry};
 
 #[derive(Error, Debug)]
 pub enum VaultError {
-    #[error("Vault file not found or salt file missing: {0}")]
-    SaltFileMissing(String),
+    #[error("Vault file not found: {0}")]
+    FileNotFound(String),
 
-    #[error("Corrupt salt file")]
-    SaltFileCorrupt,
+    #[error("Vault file too small to contain salt header")]
+    FileTooSmall,
 
     #[error("Wrong master password or corrupt vault")]
     WrongPassword,
@@ -39,24 +39,19 @@ pub struct Vault {
 }
 
 impl Vault {
-    /// Creates a new vault file at `path` protected by `master_password`.
-    /// Writes the 16-byte salt to `<path>.salt`.
+    /// Creates a new vault at `path` protected by `master_password`.
+    /// The Argon2id salt is stored in the SQLCipher file header (first 16 bytes).
+    /// Single file — no companion `.salt` file needed.
     pub fn create(path: &str, master_password: &str) -> Result<Self, VaultError> {
         let salt = crypto::generate_salt();
         let key = crypto::derive_key(master_password, &salt)?;
-        let conn = db::open(path, &key)?;
+        let conn = db::create(path, &key, &salt)?;
         db::init_schema(&conn)?;
-
-        // Write salt to companion file — Argon2 salt is not secret
-        let salt_path = format!("{}.salt", path);
-        std::fs::write(&salt_path, salt)?;
 
         // Restrict permissions to owner-only on Unix systems
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(&salt_path, perms)?;
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
         }
 
@@ -64,14 +59,11 @@ impl Vault {
     }
 
     /// Opens an existing vault file.
-    /// Reads the salt from `<path>.salt`, re-derives the key, and verifies with a probe query.
+    /// Reads the Argon2id salt from the first 16 bytes of the SQLCipher file header,
+    /// re-derives the key, and verifies with a probe query.
     pub fn open(path: &str, master_password: &str) -> Result<Self, VaultError> {
-        let salt_path = format!("{}.salt", path);
-        let salt_bytes =
-            std::fs::read(&salt_path).map_err(|_| VaultError::SaltFileMissing(salt_path))?;
-        let salt: [u8; 16] = salt_bytes
-            .try_into()
-            .map_err(|_| VaultError::SaltFileCorrupt)?;
+        // Read the salt from the SQLCipher file header (first 16 bytes)
+        let salt = Self::read_salt(path)?;
 
         let key = crypto::derive_key(master_password, &salt)?;
         let conn = db::open(path, &key)?;
@@ -81,6 +73,17 @@ impl Vault {
             .map_err(|_| VaultError::WrongPassword)?;
 
         Ok(Self { conn })
+    }
+
+    /// Reads the 16-byte salt from the SQLCipher file header.
+    fn read_salt(path: &str) -> Result<[u8; 16], VaultError> {
+        use std::io::Read;
+        let mut file =
+            std::fs::File::open(path).map_err(|_| VaultError::FileNotFound(path.to_string()))?;
+        let mut salt = [0u8; 16];
+        file.read_exact(&mut salt)
+            .map_err(|_| VaultError::FileTooSmall)?;
+        Ok(salt)
     }
 
     // -------------------------------------------------------------------------
