@@ -28,9 +28,14 @@ pub enum VaultError {
     #[error("Crypto error: {0}")]
     Crypto(#[from] crypto::CryptoError),
 
+    #[error("Master password too short (minimum {0} characters)")]
+    PasswordTooShort(usize),
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }
+
+const MIN_PASSWORD_LENGTH: usize = 8;
 
 /// High-level handle to an open, authenticated vault.
 #[derive(Debug)]
@@ -43,6 +48,9 @@ impl Vault {
     /// The Argon2id salt is stored in the SQLCipher file header (first 16 bytes).
     /// Single file — no companion `.salt` file needed.
     pub fn create(path: &str, master_password: &str) -> Result<Self, VaultError> {
+        if master_password.len() < MIN_PASSWORD_LENGTH {
+            return Err(VaultError::PasswordTooShort(MIN_PASSWORD_LENGTH));
+        }
         let salt = crypto::generate_salt();
         let key = crypto::derive_key(master_password, &salt)?;
         let conn = db::create(path, &key, &salt)?;
@@ -106,15 +114,14 @@ impl Vault {
             ],
         )?;
         let id = self.conn.last_insert_rowid();
-        let entry = self.get_entry(id)?;
+        let entry = self.get_entry_internal(id)?;
         log_action(&self.conn, "create", Some(id), Some(&new.title))?;
         Ok(entry)
     }
 
-    /// Fetches a single entry by id.
-    pub fn get_entry(&self, id: i64) -> Result<Entry, VaultError> {
-        let entry = self
-            .conn
+    /// Fetches a single entry by id (internal, no audit log).
+    fn get_entry_internal(&self, id: i64) -> Result<Entry, VaultError> {
+        self.conn
             .query_row(
                 "SELECT id, title, username, password, url, notes, totp_secret,
                         category_id, favorite, created_at, updated_at
@@ -125,7 +132,12 @@ impl Vault {
             .map_err(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => VaultError::EntryNotFound(id),
                 other => VaultError::Database(other),
-            })?;
+            })
+    }
+
+    /// Fetches a single entry by id.
+    pub fn get_entry(&self, id: i64) -> Result<Entry, VaultError> {
+        let entry = self.get_entry_internal(id)?;
         log_action(&self.conn, "read", Some(id), None)?;
         Ok(entry)
     }
@@ -145,7 +157,7 @@ impl Vault {
     /// Applies the non-None fields of `updates` to the entry with the given id.
     pub fn update_entry(&self, id: i64, mut updates: EntryUpdate) -> Result<Entry, VaultError> {
         // Verify entry exists first
-        let existing = self.get_entry(id)?;
+        let existing = self.get_entry_internal(id)?;
 
         let title = updates
             .title
@@ -190,7 +202,7 @@ impl Vault {
                 id
             ],
         )?;
-        let entry = self.get_entry(id)?;
+        let entry = self.get_entry_internal(id)?;
         log_action(&self.conn, "update", Some(id), Some(&entry.title))?;
         Ok(entry)
     }
@@ -214,12 +226,21 @@ impl Vault {
 
     /// Searches entries whose title, username, url, or notes contain `query` (case-insensitive).
     pub fn search_entries(&self, query: &str) -> Result<Vec<Entry>, VaultError> {
-        let pattern = format!("%{}%", query);
+        let escaped: String = query
+            .chars()
+            .flat_map(|c| match c {
+                '%' => vec!['\\', '%'],
+                '_' => vec!['\\', '_'],
+                '\\' => vec!['\\', '\\'],
+                other => vec![other],
+            })
+            .collect();
+        let pattern = format!("%{}%", escaped);
         let mut stmt = self.conn.prepare(
             "SELECT id, title, username, password, url, notes, totp_secret,
                     category_id, favorite, created_at, updated_at
              FROM entries
-             WHERE title LIKE ?1 OR username LIKE ?1 OR url LIKE ?1 OR notes LIKE ?1
+             WHERE title LIKE ?1 ESCAPE '\\' OR username LIKE ?1 ESCAPE '\\' OR url LIKE ?1 ESCAPE '\\' OR notes LIKE ?1 ESCAPE '\\'
              ORDER BY title ASC",
         )?;
         let entries: Result<Vec<Entry>, rusqlite::Error> = stmt

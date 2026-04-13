@@ -19,6 +19,7 @@ pub fn open(path: &str, key: &Zeroizing<[u8; 32]>) -> Result<Connection, DbError
     let pragma = hex_key_pragma(key);
     conn.execute_batch(&pragma)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    migrate(&conn)?;
     Ok(conn)
 }
 
@@ -73,4 +74,24 @@ fn hex_key_pragma(key: &Zeroizing<[u8; 32]>) -> Zeroizing<String> {
 fn hex_salt_pragma(salt: &[u8; 16]) -> String {
     let hex: String = salt.iter().map(|b| format!("{:02x}", b)).collect();
     format!("PRAGMA cipher_salt = \"x'{}'\"", hex)
+}
+
+/// Applies pending schema migrations. Returns Ok if schema not yet initialized.
+pub fn migrate(conn: &Connection) -> Result<(), DbError> {
+    let current = current_version(conn);
+    if current < 1 {
+        return Ok(()); // schema not initialized yet
+    }
+    // Future migrations go here:
+    // if current < 2 { ... conn.execute_batch(...)?; set_version(conn, 2)?; }
+    Ok(())
+}
+
+fn current_version(conn: &Connection) -> i64 {
+    conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+        [],
+        |row| row.get(0),
+    )
+    .unwrap_or(0)
 }

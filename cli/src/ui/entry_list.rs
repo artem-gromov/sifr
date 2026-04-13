@@ -81,14 +81,30 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         border_x + 2 + 20 + username_w + 10 + 22,
     ];
 
+    // Scroll: compute visible height (area minus borders minus header row)
+    let visible_height = area.height.saturating_sub(3) as usize; // 2 border + 1 header
+
+    // Clamp scroll offset so selected_index is visible
+    if app.selected_index < app.entry_scroll_offset {
+        app.entry_scroll_offset = app.selected_index;
+    }
+    if visible_height > 0 && app.selected_index >= app.entry_scroll_offset + visible_height {
+        app.entry_scroll_offset = app.selected_index - visible_height + 1;
+    }
+
+    let scroll_offset = app.entry_scroll_offset;
+    let selected = app.selected_index;
+
     let tb = app.theme_bridge();
     let entries = app.filtered_entries();
 
     let rows: Vec<Row> = entries
         .iter()
         .enumerate()
+        .skip(scroll_offset)
+        .take(visible_height)
         .map(|(i, e)| {
-            let marker = if i == app.selected_index { ">" } else { " " };
+            let marker = if i == selected { ">" } else { " " };
             let fav = if e.favorite { "\u{2605}" } else { " " };
             let cells = vec![
                 Cell::from(Span::styled(marker, tb.accent())),
@@ -107,7 +123,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
                 )),
                 Cell::from(Span::styled(fav.to_string(), tb.accent())),
             ];
-            let style = if i == app.selected_index {
+            let style = if i == selected {
                 tb.selection()
             } else {
                 tb.bg()
@@ -147,7 +163,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         .highlight_style(tb.selection());
 
     let mut state = TableState::default();
-    state.select(Some(app.selected_index));
+    state.select(Some(selected - scroll_offset));
     f.render_stateful_widget(table, area, &mut state);
 }
 

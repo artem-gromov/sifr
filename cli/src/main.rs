@@ -165,8 +165,8 @@ fn run_tui_inner(vault_path: Option<String>, vault: Option<sifr_core::Vault>) ->
     }
 
     // Zeroize password input before drop
-    zeroize::Zeroize::zeroize(&mut app.password_input);
-    zeroize::Zeroize::zeroize(&mut app.password_confirm);
+    *app.password_input = String::new();
+    *app.password_confirm = String::new();
 
     // Restore terminal
     restore_terminal();

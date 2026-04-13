@@ -77,7 +77,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                         // Click on search bar → activate search
                         app.search_active = true;
                     } else if row >= 4 {
-                        let index = row - 4;
+                        let index = app.entry_scroll_offset + (row - 4);
                         let count = app.filtered_entries().len();
                         if count > 0 && index < count {
                             app.selected_index = index;
@@ -263,7 +263,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                     // Second Enter: compare and create
                     if app.password_input != app.password_confirm {
                         app.set_error("Passwords don't match");
-                        zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                        *app.password_confirm = String::new();
                         app.confirm_active = false;
                         return;
                     }
@@ -277,15 +277,15 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                             app.vault = Some(vault);
                             app.refresh_entries();
                             crate::config::save_last_vault(&path);
-                            zeroize::Zeroize::zeroize(&mut app.password_input);
-                            zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                            *app.password_input = String::new();
+                            *app.password_confirm = String::new();
                             app.confirm_active = false;
                             app.screen = Screen::EntryList;
                         }
                         Err(e) => {
                             app.set_error(&e.to_string());
-                            zeroize::Zeroize::zeroize(&mut app.password_input);
-                            zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                            *app.password_input = String::new();
+                            *app.password_confirm = String::new();
                             app.confirm_active = false;
                         }
                     }
@@ -310,7 +310,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                         app.set_error(&e.to_string());
                     }
                 }
-                zeroize::Zeroize::zeroize(&mut app.password_input);
+                *app.password_input = String::new();
             }
         }
         KeyCode::Char(c) => {
@@ -340,7 +340,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                 app.confirm_active = !app.confirm_active;
             } else {
                 // Open mode: switch to vault picker to choose a different file
-                zeroize::Zeroize::zeroize(&mut app.password_input);
+                *app.password_input = String::new();
                 app.started_from_picker = true;
                 app.screen = Screen::VaultPicker;
             }
@@ -349,7 +349,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
             if app.unlock_mode == UnlockMode::Create && app.confirm_active {
                 // Go back to password field
                 app.confirm_active = false;
-                zeroize::Zeroize::zeroize(&mut app.password_confirm);
+                *app.password_confirm = String::new();
             } else if app.started_from_picker {
                 app.screen = Screen::VaultPicker;
             } else {
@@ -382,10 +382,12 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             KeyCode::Backspace => {
                 app.search_query.pop();
                 app.selected_index = 0;
+                app.refilter();
             }
             KeyCode::Char(c) => {
                 app.search_query.push(c);
                 app.selected_index = 0;
+                app.refilter();
             }
             _ => {}
         }
@@ -401,6 +403,7 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
                 // Clear search filter
                 app.search_query.clear();
                 app.selected_index = 0;
+                app.refilter();
             } else {
                 app.running = false;
             }
@@ -481,9 +484,10 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             app.vault = None;
             app.entries.clear();
             app.selected_index = 0;
+            app.entry_scroll_offset = 0;
             app.search_query.clear();
             app.search_active = false;
-            zeroize::Zeroize::zeroize(&mut app.password_input);
+            *app.password_input = String::new();
             if app.started_from_picker {
                 app.screen = Screen::VaultPicker;
             } else {

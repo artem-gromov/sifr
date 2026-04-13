@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::Alignment,
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
@@ -22,7 +22,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let path_width = vault_display.len() as u16 + 6;
     let modal_width = path_width.clamp(44, 72);
     let modal_height = if is_create { 15u16 } else { 13u16 };
-    let area = centered_rect(modal_width, modal_height, full);
+    let area = super::centered_rect(modal_width, modal_height, full);
 
     // Clear behind modal
     f.render_widget(Clear, area);
@@ -31,13 +31,13 @@ pub fn draw(f: &mut Frame, app: &App) {
     let box_inner = (modal_width as usize).saturating_sub(8).max(20);
 
     let password_display = if app.password_visible {
-        app.password_input.clone()
+        app.password_input.as_str().to_owned()
     } else {
         "\u{2022}".repeat(app.password_input.len())
     };
 
     let confirm_display = if app.password_visible {
-        app.password_confirm.clone()
+        app.password_confirm.as_str().to_owned()
     } else {
         "\u{2022}".repeat(app.password_confirm.len())
     };
@@ -153,24 +153,4 @@ pub fn draw(f: &mut Frame, app: &App) {
         .alignment(Alignment::Left);
 
     f.render_widget(modal, area);
-}
-
-fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(r.height.saturating_sub(height) / 2),
-            Constraint::Length(height),
-            Constraint::Min(0),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(r.width.saturating_sub(width) / 2),
-            Constraint::Length(width),
-            Constraint::Min(0),
-        ])
-        .split(popup_layout[1])[1]
 }

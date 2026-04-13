@@ -34,6 +34,17 @@ pub fn save_last_vault(vault_path: &str) {
     }
     if let Some(dir) = config_dir() {
         let _ = fs::create_dir_all(&dir);
-        let _ = fs::write(dir.join("last_vault"), vault_path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o700));
+        }
+        let file = dir.join("last_vault");
+        let _ = fs::write(&file, vault_path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&file, fs::Permissions::from_mode(0o600));
+        }
     }
 }

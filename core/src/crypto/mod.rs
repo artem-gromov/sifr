@@ -14,7 +14,7 @@ pub enum CryptoError {
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, CryptoError> {
     let mut key = Zeroizing::new([0u8; 32]);
     let params =
-        Params::new(19456, 2, 1, Some(32)).expect("valid argon2 params: checked at compile time");
+        Params::new(65536, 3, 1, Some(32)).expect("valid argon2 params: checked at compile time");
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     argon2
         .hash_password_into(password.as_bytes(), salt, key.as_mut())
@@ -39,19 +39,54 @@ pub fn generate_password(
     symbols: bool,
 ) -> Zeroizing<String> {
     use rand::seq::SliceRandom;
-    let mut chars: Vec<char> = ('a'..='z').collect();
+
+    let lower: Vec<char> = ('a'..='z').collect();
+    let upper: Vec<char> = ('A'..='Z').collect();
+    let digits: Vec<char> = ('0'..='9').collect();
+    let syms: Vec<char> = "!@#$%^&*()-_=+[]{}|;:,.<>?".chars().collect();
+
+    let mut all_chars: Vec<char> = lower.clone();
+    let mut required_classes: Vec<&[char]> = Vec::new();
+
     if uppercase {
-        chars.extend('A'..='Z');
+        all_chars.extend(&upper);
+        required_classes.push(&upper);
     }
     if numbers {
-        chars.extend('0'..='9');
+        all_chars.extend(&digits);
+        required_classes.push(&digits);
     }
     if symbols {
-        chars.extend("!@#$%^&*()-_=+[]{}|;:,.<>?".chars());
+        all_chars.extend(&syms);
+        required_classes.push(&syms);
     }
+
     let mut rng = OsRng;
-    let s: String = (0..length)
-        .map(|_| *chars.choose(&mut rng).unwrap_or(&'a'))
+    let mut result: Vec<char> = (0..length)
+        .map(|_| *all_chars.choose(&mut rng).unwrap_or(&'a'))
         .collect();
-    Zeroizing::new(s)
+
+    // Guarantee each required class is present (if length permits)
+    if length >= required_classes.len() {
+        let mut positions_used = Vec::new();
+        for class in &required_classes {
+            let already_present = result.iter().any(|c| class.contains(c));
+            if !already_present {
+                // Pick a random position not already used for a forced char
+                let available: Vec<usize> = (0..length)
+                    .filter(|i| !positions_used.contains(i))
+                    .collect();
+                if let Some(&pos) = available.choose(&mut rng) {
+                    if let Some(&ch) = class.choose(&mut rng) {
+                        result[pos] = ch;
+                        positions_used.push(pos);
+                    }
+                }
+            }
+        }
+        // Fisher-Yates shuffle
+        result.shuffle(&mut rng);
+    }
+
+    Zeroizing::new(result.into_iter().collect())
 }
