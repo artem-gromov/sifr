@@ -16,7 +16,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Modal: 50 wide, tall enough for 5 fields + hints
     let modal_width = 52u16;
-    let modal_height = 20u16;
+    let modal_height = 23u16;
     let area = super::centered_rect(modal_width, modal_height, full);
     f.render_widget(Clear, area);
 

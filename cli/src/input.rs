@@ -121,6 +121,20 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                             app.copy_to_clipboard(&password);
                                         }
                                     }
+                                    4 => {
+                                        // TOTP → copy
+                                        if let Some(e) =
+                                            app.filtered_entries().get(app.selected_index)
+                                        {
+                                            if let Some(ref secret) = e.totp_secret {
+                                                if let Ok((code, _)) =
+                                                    sifr_core::crypto::generate_totp(secret)
+                                                {
+                                                    app.copy_to_clipboard(&code);
+                                                }
+                                            }
+                                        }
+                                    }
                                     _ => {}
                                 }
                                 app.last_click = None;
@@ -441,6 +455,17 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             app.screen = Screen::Help;
         }
         KeyCode::Char('t') => {
+            let entry_id = app.filtered_entries().get(app.selected_index).map(|e| e.id);
+            if let Some(id) = entry_id {
+                if let Some(ref vault) = app.vault {
+                    match vault.get_totp_code(id) {
+                        Ok((code, _)) => app.copy_to_clipboard(&code),
+                        Err(_) => app.set_error("No TOTP configured for this entry"),
+                    }
+                }
+            }
+        }
+        KeyCode::Char('T') => {
             app.cycle_theme();
         }
         KeyCode::Char('y') => {
@@ -608,6 +633,11 @@ fn submit_form(app: &mut App) {
         .get(4)
         .map(|f| non_empty(f.value.trim()))
         .unwrap_or(None);
+    let totp_secret = app
+        .form_fields
+        .get(5)
+        .map(|f| non_empty(f.value.trim()))
+        .unwrap_or(None);
 
     if let Some(editing_id) = app.form_editing_id {
         // Edit mode: build EntryUpdate
@@ -617,7 +647,7 @@ fn submit_form(app: &mut App) {
             password: Some(password),
             url: Some(url),
             notes: Some(notes),
-            totp_secret: None,
+            totp_secret: Some(totp_secret),
             category_id: None,
             favorite: None,
         };
@@ -643,7 +673,7 @@ fn submit_form(app: &mut App) {
             password,
             url,
             notes,
-            totp_secret: None,
+            totp_secret,
             category_id: None,
         };
         if let Some(ref vault) = app.vault {
