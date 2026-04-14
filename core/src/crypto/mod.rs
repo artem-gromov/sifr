@@ -1,12 +1,17 @@
 use argon2::{Algorithm, Argon2, Params, Version};
 use rand::rngs::OsRng;
+use std::time::SystemTime;
 use thiserror::Error;
+use totp_rs::{Algorithm as TotpAlgorithm, Secret, TOTP};
 use zeroize::Zeroizing;
 
 #[derive(Error, Debug)]
 pub enum CryptoError {
     #[error("Key derivation failed: {0}")]
     KeyDerivation(String),
+
+    #[error("TOTP generation failed: {0}")]
+    Totp(String),
 }
 
 /// Derives a 32-byte vault key from a master password using Argon2id.
@@ -28,6 +33,28 @@ pub fn generate_salt() -> [u8; 16] {
     let mut salt = [0u8; 16];
     OsRng.fill_bytes(&mut salt);
     salt
+}
+
+/// Generates a TOTP code from a base32-encoded secret.
+/// Returns (6-digit code string, seconds remaining until next code).
+pub fn generate_totp(secret: &str) -> Result<(String, u8), CryptoError> {
+    let normalized: String = secret
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .flat_map(|c| c.to_uppercase())
+        .collect();
+    let secret_bytes = Secret::Encoded(normalized)
+        .to_bytes()
+        .map_err(|e| CryptoError::Totp(e.to_string()))?;
+    let totp = TOTP::new_unchecked(TotpAlgorithm::SHA1, 6, 1, 30, secret_bytes);
+    let code = totp
+        .generate_current()
+        .map_err(|e| CryptoError::Totp(e.to_string()))?;
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|e| CryptoError::Totp(e.to_string()))?;
+    let seconds_remaining = 30 - (now.as_secs() % 30) as u8;
+    Ok((code, seconds_remaining))
 }
 
 /// Generates a random password with given length and character set flags.

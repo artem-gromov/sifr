@@ -308,6 +308,12 @@ impl App {
                 required: false,
                 secret: false,
             },
+            FormField {
+                label: "TOTP Secret".to_string(),
+                value: String::new(),
+                required: false,
+                secret: true,
+            },
         ]
     }
 
@@ -328,6 +334,7 @@ impl App {
         fields[2].value = entry.password.as_deref().unwrap_or("").to_string();
         fields[3].value = entry.url.as_deref().unwrap_or("").to_string();
         fields[4].value = entry.notes.as_deref().unwrap_or("").to_string();
+        fields[5].value = entry.totp_secret.as_deref().unwrap_or("").to_string();
         self.form_fields = fields;
         self.form_focused = 0;
         self.form_editing_id = Some(entry.id);

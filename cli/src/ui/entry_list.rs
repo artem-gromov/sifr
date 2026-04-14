@@ -6,6 +6,19 @@ use ratatui::{
 };
 
 use crate::app::App;
+use crate::theme_bridge::ThemeBridge;
+
+fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge<'a>) -> Span<'a> {
+    let Some(ref secret) = entry.totp_secret else {
+        return Span::raw("");
+    };
+    let Ok((code, remaining)) = sifr_core::crypto::generate_totp(secret) else {
+        return Span::styled("err", tb.red());
+    };
+    let display = format!("{} {} {:2}s", &code[..3], &code[3..], remaining);
+    let style = if remaining <= 5 { tb.red() } else { tb.muted() };
+    Span::styled(display, style)
+}
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let full = f.size();
@@ -70,7 +83,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
     // Compute column boundaries for double-click detection BEFORE borrowing app
     let border_x = area.x + 1;
     let available = area.width.saturating_sub(2);
-    let fixed: u16 = 2 + 20 + 10 + 22 + 3;
+    let fixed: u16 = 2 + 20 + 10 + 11 + 3;
     let username_w = available.saturating_sub(fixed).max(16);
     app.column_boundaries = vec![
         border_x,
@@ -78,7 +91,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         border_x + 2 + 20,
         border_x + 2 + 20 + username_w,
         border_x + 2 + 20 + username_w + 10,
-        border_x + 2 + 20 + username_w + 10 + 22,
+        border_x + 2 + 20 + username_w + 10 + 11,
     ];
 
     // Scroll: compute visible height (area minus borders minus header row)
@@ -117,10 +130,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
                     "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
                     tb.subtext(),
                 )),
-                Cell::from(Span::styled(
-                    e.url.as_deref().unwrap_or("").to_string(),
-                    tb.subtext(),
-                )),
+                Cell::from(totp_cell(e, &tb)),
                 Cell::from(Span::styled(fav.to_string(), tb.accent())),
             ];
             let style = if i == selected {
@@ -137,7 +147,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         Constraint::Length(20), // Title
         Constraint::Min(16),    // Username (flexible)
         Constraint::Length(10), // Password
-        Constraint::Length(22), // URL
+        Constraint::Length(11), // TOTP
         Constraint::Length(3),  // Fav
     ];
 
@@ -146,7 +156,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         Cell::from(Span::styled("Title", tb.accent())),
         Cell::from(Span::styled("Username", tb.accent())),
         Cell::from(Span::styled("Password", tb.accent())),
-        Cell::from(Span::styled("URL", tb.accent())),
+        Cell::from(Span::styled("TOTP", tb.accent())),
         Cell::from(Span::styled("Fav", tb.accent())),
     ])
     .style(tb.surface());
@@ -184,6 +194,8 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(" pw", tb.muted()),
         Span::styled("  u", tb.accent()),
         Span::styled(" user", tb.muted()),
+        Span::styled("  t", tb.accent()),
+        Span::styled(" totp", tb.muted()),
         Span::styled("  /", tb.accent()),
         Span::styled(" search", tb.muted()),
         Span::styled("  L", tb.accent()),
