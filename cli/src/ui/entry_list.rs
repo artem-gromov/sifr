@@ -16,11 +16,7 @@ fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge<'a>) -> Span
         return Span::styled("err", tb.red());
     };
     let display = format!("{} {} {:2}s", &code[..3], &code[3..], remaining);
-    let style = if remaining <= 5 {
-        tb.red()
-    } else {
-        tb.muted()
-    };
+    let style = if remaining <= 5 { tb.red() } else { tb.muted() };
     Span::styled(display, style)
 }
 
