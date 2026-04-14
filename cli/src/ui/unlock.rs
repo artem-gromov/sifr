@@ -91,18 +91,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         )));
         content.push(Line::from(""));
 
-        // Error or hints
+        // Error
         if let Some(ref err) = app.error_message {
             content.push(Line::from(Span::styled(format!("  {}", err), tb.red())));
-        } else {
-            content.push(Line::from(vec![
-                Span::styled("  Enter", tb.accent()),
-                Span::styled(" confirm  ", tb.muted()),
-                Span::styled("Tab", tb.accent()),
-                Span::styled(" switch field  ", tb.muted()),
-                Span::styled("Esc", tb.accent()),
-                Span::styled(" back", tb.muted()),
-            ]));
         }
     } else {
         content.push(Line::from(Span::styled(
@@ -117,22 +108,37 @@ pub fn draw(f: &mut Frame, app: &App) {
         )));
         content.push(Line::from(""));
 
-        // Error or hints
+        // Error
         if let Some(ref err) = app.error_message {
             content.push(Line::from(Span::styled(format!("  {}", err), tb.red())));
-        } else {
-            content.push(Line::from(vec![
-                Span::styled("  Enter", tb.accent()),
-                Span::styled(" unlock  ", tb.muted()),
-                Span::styled("Tab", tb.accent()),
-                Span::styled(" browse  ", tb.muted()),
-                Span::styled("Esc", tb.accent()),
-                Span::styled(" quit", tb.muted()),
-            ]));
         }
     }
 
-    content.push(Line::from(""));
+    // Pad so hints anchor to the bottom of the modal
+    let inner_height = modal_height.saturating_sub(2) as usize; // subtract top/bottom border
+    let hint_line = if is_create {
+        Line::from(vec![
+            Span::styled("  Enter", tb.accent()),
+            Span::styled(" confirm  ", tb.muted()),
+            Span::styled("Tab", tb.accent()),
+            Span::styled(" switch field  ", tb.muted()),
+            Span::styled("Esc", tb.accent()),
+            Span::styled(" back", tb.muted()),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  Enter", tb.accent()),
+            Span::styled(" unlock  ", tb.muted()),
+            Span::styled("Tab", tb.accent()),
+            Span::styled(" browse  ", tb.muted()),
+            Span::styled("Esc", tb.accent()),
+            Span::styled(" quit", tb.muted()),
+        ])
+    };
+    while content.len() < inner_height.saturating_sub(1) {
+        content.push(Line::from(""));
+    }
+    content.push(hint_line);
 
     let title = if is_create {
         " Create New Vault "

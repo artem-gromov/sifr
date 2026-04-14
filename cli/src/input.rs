@@ -148,6 +148,20 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     // Click outside modal → go back to EntryList
                     app.screen = Screen::EntryList;
                 }
+                Screen::AddEntry | Screen::EditEntry => {
+                    // Click outside modal → close form
+                    if let Some(area) = app.form_modal_area {
+                        if mouse.row < area.y
+                            || mouse.row >= area.y + area.height
+                            || mouse.column < area.x
+                            || mouse.column >= area.x + area.width
+                        {
+                            app.zeroize_form_password();
+                            app.form_fields.clear();
+                            app.screen = Screen::EntryList;
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -465,9 +479,6 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
                 }
             }
         }
-        KeyCode::Char('T') => {
-            app.cycle_theme();
-        }
         KeyCode::Char('y') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
                 let password = e.password.as_deref().unwrap_or("").to_string();
@@ -545,59 +556,107 @@ fn non_empty(s: &str) -> Option<String> {
 
 fn handle_form(app: &mut App, key: KeyEvent) {
     let field_count = app.form_fields.len();
+    let is_add = app.form_editing_id.is_none();
 
-    match key.code {
-        KeyCode::Esc => {
-            app.zeroize_form_password();
-            app.form_fields.clear();
-            app.screen = Screen::EntryList;
-        }
-        KeyCode::Tab | KeyCode::Down => {
-            app.form_focused = (app.form_focused + 1) % field_count;
-        }
-        KeyCode::BackTab | KeyCode::Up => {
-            if app.form_focused == 0 {
-                app.form_focused = field_count - 1;
-            } else {
-                app.form_focused -= 1;
+    if let Some(editing_idx) = app.form_editing_field {
+        // Editing a specific field
+        match key.code {
+            KeyCode::Esc => {
+                if is_add {
+                    // Cancel add entirely
+                    app.zeroize_form_password();
+                    app.form_fields.clear();
+                    app.screen = Screen::EntryList;
+                } else {
+                    // Back to view mode
+                    app.form_editing_field = None;
+                }
             }
-        }
-        KeyCode::Backspace => {
-            if let Some(field) = app.form_fields.get_mut(app.form_focused) {
-                field.value.pop();
+            KeyCode::Tab | KeyCode::Down => {
+                let next = (editing_idx + 1) % field_count;
+                app.form_focused = next;
+                app.form_editing_field = Some(next);
             }
-        }
-        KeyCode::Char(c) => {
-            if key.modifiers.contains(KeyModifiers::CONTROL) {
-                match c {
-                    'c' => app.running = false,
-                    'v' => {
-                        app.form_password_visible = !app.form_password_visible;
-                    }
-                    'g' => {
-                        // Generate password only when focused on the password field (index 2)
-                        if app.form_focused == 2 {
-                            let pwd = sifr_core::crypto::generate_password(16, true, true, true);
-                            if let Some(field) = app.form_fields.get_mut(2) {
-                                field.value = pwd.as_str().to_string();
+            KeyCode::BackTab | KeyCode::Up => {
+                let prev = if editing_idx == 0 {
+                    field_count - 1
+                } else {
+                    editing_idx - 1
+                };
+                app.form_focused = prev;
+                app.form_editing_field = Some(prev);
+            }
+            KeyCode::Backspace => {
+                if let Some(field) = app.form_fields.get_mut(editing_idx) {
+                    field.value.pop();
+                }
+            }
+            KeyCode::Char(c) => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    match c {
+                        'c' => app.running = false,
+                        'v' => {
+                            app.form_password_visible = !app.form_password_visible;
+                        }
+                        'g' => {
+                            if editing_idx == 2 {
+                                let pwd =
+                                    sifr_core::crypto::generate_password(16, true, true, true);
+                                if let Some(field) = app.form_fields.get_mut(2) {
+                                    field.value = pwd.as_str().to_string();
+                                }
                             }
                         }
+                        's' => {
+                            submit_form(app);
+                        }
+                        _ => {}
                     }
-                    's' => {
-                        submit_form(app);
+                } else {
+                    app.error_message = None;
+                    app.error_clear_at = None;
+                    if let Some(field) = app.form_fields.get_mut(editing_idx) {
+                        field.value.push(c);
                     }
-                    _ => {}
-                }
-            } else {
-                // Clear error when user types
-                app.error_message = None;
-                app.error_clear_at = None;
-                if let Some(field) = app.form_fields.get_mut(app.form_focused) {
-                    field.value.push(c);
                 }
             }
+            _ => {}
         }
-        _ => {}
+    } else {
+        // View/detail mode (form_editing_field is None)
+        match key.code {
+            KeyCode::Esc => {
+                app.zeroize_form_password();
+                app.form_fields.clear();
+                app.screen = Screen::EntryList;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if field_count > 0 && app.form_focused + 1 < field_count {
+                    app.form_focused += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if app.form_focused > 0 {
+                    app.form_focused -= 1;
+                }
+            }
+            KeyCode::Enter => {
+                app.form_editing_field = Some(app.form_focused);
+            }
+            KeyCode::Char('y') => {
+                if let Some(field) = app.form_fields.get(app.form_focused) {
+                    let val = field.value.clone();
+                    app.copy_to_clipboard(&val);
+                }
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.running = false;
+            }
+            KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.form_password_visible = !app.form_password_visible;
+            }
+            _ => {}
+        }
     }
 }
 

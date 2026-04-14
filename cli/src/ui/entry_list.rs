@@ -8,7 +8,7 @@ use ratatui::{
 use crate::app::App;
 use crate::theme_bridge::ThemeBridge;
 
-fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge<'a>) -> Span<'a> {
+fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge) -> Span<'a> {
     let Some(ref secret) = entry.totp_secret else {
         return Span::raw("");
     };
@@ -83,15 +83,17 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
     // Compute column boundaries for double-click detection BEFORE borrowing app
     let border_x = area.x + 1;
     let available = area.width.saturating_sub(2);
-    let fixed: u16 = 2 + 20 + 10 + 11 + 3;
-    let username_w = available.saturating_sub(fixed).max(16);
+    let fixed: u16 = 2 + 10 + 11 + 3; // marker + password + totp + fav
+    let flex = available.saturating_sub(fixed);
+    let title_w = (flex * 55 / 100).max(15);
+    let username_w = flex.saturating_sub(title_w).max(10);
     app.column_boundaries = vec![
         border_x,
         border_x + 2,
-        border_x + 2 + 20,
-        border_x + 2 + 20 + username_w,
-        border_x + 2 + 20 + username_w + 10,
-        border_x + 2 + 20 + username_w + 10 + 11,
+        border_x + 2 + title_w,
+        border_x + 2 + title_w + username_w,
+        border_x + 2 + title_w + username_w + 10,
+        border_x + 2 + title_w + username_w + 10 + 11,
     ];
 
     // Scroll: compute visible height (area minus borders minus header row)
@@ -143,12 +145,12 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         .collect();
 
     let widths = [
-        Constraint::Length(2),  // Marker
-        Constraint::Length(20), // Title
-        Constraint::Min(16),    // Username (flexible)
-        Constraint::Length(10), // Password
-        Constraint::Length(11), // TOTP
-        Constraint::Length(3),  // Fav
+        Constraint::Length(2),          // Marker
+        Constraint::Length(title_w),    // Title
+        Constraint::Length(username_w), // Username
+        Constraint::Length(10),         // Password
+        Constraint::Length(11),         // TOTP
+        Constraint::Length(3),          // Fav
     ];
 
     let header = Row::new(vec![
