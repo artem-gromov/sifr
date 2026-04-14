@@ -245,3 +245,69 @@ fn test_vault_create_minimum_password() {
     let vault = Vault::create(&path, "exactly8");
     assert!(vault.is_ok());
 }
+
+// ---------------------------------------------------------------------------
+// TOTP generation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_generate_totp_produces_six_digit_code() {
+    use sifr_core::crypto::generate_totp;
+
+    // Known valid base32 secret (decodes to "12345678901234567890")
+    let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+    let (code, _remaining) = generate_totp(secret).unwrap();
+    assert_eq!(code.len(), 6);
+    assert!(code.chars().all(|c| c.is_ascii_digit()));
+}
+
+#[test]
+fn test_generate_totp_seconds_remaining_in_range() {
+    use sifr_core::crypto::generate_totp;
+
+    let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+    let (_code, remaining) = generate_totp(secret).unwrap();
+    assert!((1..=30).contains(&remaining));
+}
+
+#[test]
+fn test_generate_totp_invalid_base32_returns_error() {
+    use sifr_core::crypto::generate_totp;
+
+    let result = generate_totp("not-valid-base32!!!");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_vault_get_totp_code() {
+    let dir = TempDir::new().unwrap();
+    let vault = make_vault(&dir);
+
+    let ne = NewEntry {
+        title: "TOTP Test".into(),
+        username: None,
+        password: None,
+        url: None,
+        notes: None,
+        totp_secret: Some("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".into()),
+        category_id: None,
+    };
+    let entry = vault.add_entry(&ne).unwrap();
+
+    let (code, remaining) = vault.get_totp_code(entry.id).unwrap();
+    assert_eq!(code.len(), 6);
+    assert!(code.chars().all(|c| c.is_ascii_digit()));
+    assert!((1..=30).contains(&remaining));
+}
+
+#[test]
+fn test_vault_get_totp_code_no_secret() {
+    let dir = TempDir::new().unwrap();
+    let vault = make_vault(&dir);
+
+    let ne = new_entry("No TOTP", Some("alice"), Some("pw"), None, None);
+    let entry = vault.add_entry(&ne).unwrap();
+
+    let result = vault.get_totp_code(entry.id);
+    assert!(matches!(result, Err(VaultError::NoTotpSecret(_))));
+}

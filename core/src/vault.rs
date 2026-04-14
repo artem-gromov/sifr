@@ -19,6 +19,9 @@ pub enum VaultError {
     #[error("Entry not found: {0}")]
     EntryNotFound(i64),
 
+    #[error("Entry {0} has no TOTP secret")]
+    NoTotpSecret(i64),
+
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
 
@@ -222,6 +225,17 @@ impl Vault {
             Some(&format!("entry_id={}", id)),
         )?;
         Ok(())
+    }
+
+    /// Returns the current TOTP code and seconds remaining for an entry.
+    pub fn get_totp_code(&self, entry_id: i64) -> Result<(String, u8), VaultError> {
+        let entry = self.get_entry_internal(entry_id)?;
+        let secret = entry
+            .totp_secret
+            .as_deref()
+            .ok_or(VaultError::NoTotpSecret(entry_id))?;
+        let (code, remaining) = crypto::generate_totp(secret)?;
+        Ok((code, remaining))
     }
 
     /// Searches entries whose title, username, url, or notes contain `query` (case-insensitive).
