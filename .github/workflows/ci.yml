@@ -42,7 +42,11 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           choco install openssl -y --no-progress
-          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          if (Test-Path "C:\Program Files\OpenSSL-Win64") {
+            echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          } elseif (Test-Path "C:\Program Files\OpenSSL") {
+            echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+          }
 
       - name: fmt
         run: cargo fmt --all -- --check
