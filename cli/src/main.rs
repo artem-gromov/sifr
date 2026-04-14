@@ -20,7 +20,7 @@ use app::App;
 #[derive(Parser)]
 #[command(
     name = "sifr",
-    about = "Sifr — beautiful TUI password manager",
+    about = "Sifr — cross-platform terminal password manager",
     version
 )]
 struct Cli {

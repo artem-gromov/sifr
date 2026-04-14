@@ -18,7 +18,6 @@ rand.workspace = true
 zeroize.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-toml.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 totp-rs.workspace = true

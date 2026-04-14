@@ -1,6 +1,6 @@
 [package]
 name = "sifr"
-description = "Sifr — beautiful TUI password manager"
+description = "Sifr - cross-platform terminal password manager"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

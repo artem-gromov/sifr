@@ -1,5 +1,3 @@
-use sifr_core::theme::ThemeRegistry;
-
 use crate::theme_bridge::ThemeBridge;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,7 +51,6 @@ pub struct App {
     pub error_message: Option<String>,
     pub error_clear_at: Option<std::time::Instant>,
     pub started_from_picker: bool,
-    pub theme: ThemeRegistry,
     pub password_input: zeroize::Zeroizing<String>,
     pub password_confirm: zeroize::Zeroizing<String>,
     pub confirm_active: bool,
@@ -74,7 +71,11 @@ pub struct App {
     pub form_fields: Vec<FormField>,
     pub form_focused: usize,
     pub form_editing_id: Option<i64>,
+    pub form_editing_field: Option<usize>,
     pub form_password_visible: bool,
+    pub form_created_at: i64,
+    pub form_updated_at: i64,
+    pub form_modal_area: Option<ratatui::layout::Rect>,
     pub confirm_delete: Option<i64>,
     pub filtered_indices: Vec<usize>,
     pub entry_scroll_offset: usize,
@@ -95,7 +96,6 @@ impl App {
             error_message: None,
             error_clear_at: None,
             started_from_picker: false,
-            theme: ThemeRegistry::new(),
             password_input: zeroize::Zeroizing::new(String::new()),
             password_confirm: zeroize::Zeroizing::new(String::new()),
             confirm_active: false,
@@ -113,7 +113,11 @@ impl App {
             form_fields: Vec::new(),
             form_focused: 0,
             form_editing_id: None,
+            form_editing_field: None,
             form_password_visible: false,
+            form_created_at: 0,
+            form_updated_at: 0,
+            form_modal_area: None,
             confirm_delete: None,
             filtered_indices: Vec::new(),
             entry_scroll_offset: 0,
@@ -269,11 +273,8 @@ impl App {
 
     /// Returns the appropriate `ThemeBridge` for the current theme state.
     /// When no theme is active, returns a terminal-native bridge (all `Style::default()`).
-    pub fn theme_bridge(&self) -> ThemeBridge<'_> {
-        match self.theme.active() {
-            Some(t) => ThemeBridge::new(&t.palette),
-            None => ThemeBridge::terminal(),
-        }
+    pub fn theme_bridge(&self) -> ThemeBridge {
+        ThemeBridge::new()
     }
 
     fn make_form_fields() -> Vec<FormField> {
@@ -321,7 +322,11 @@ impl App {
         self.form_fields = Self::make_form_fields();
         self.form_focused = 0;
         self.form_editing_id = None;
+        self.form_editing_field = Some(0);
         self.form_password_visible = false;
+        self.form_created_at = 0;
+        self.form_updated_at = 0;
+        self.form_modal_area = None;
         self.error_message = None;
         self.error_clear_at = None;
         self.screen = Screen::AddEntry;
@@ -338,7 +343,11 @@ impl App {
         self.form_fields = fields;
         self.form_focused = 0;
         self.form_editing_id = Some(entry.id);
+        self.form_editing_field = None;
         self.form_password_visible = false;
+        self.form_created_at = entry.created_at;
+        self.form_updated_at = entry.updated_at;
+        self.form_modal_area = None;
         self.error_message = None;
         self.error_clear_at = None;
         self.screen = Screen::EditEntry;
@@ -348,30 +357,6 @@ impl App {
         for field in &mut self.form_fields {
             if field.secret {
                 zeroize::Zeroize::zeroize(&mut field.value);
-            }
-        }
-    }
-
-    /// Cycles: None → first theme → ... → last theme → None.
-    pub fn cycle_theme(&mut self) {
-        let themes: Vec<String> = self.theme.list().iter().map(|s| s.to_string()).collect();
-        match self.theme.active() {
-            None => {
-                // Move to first theme
-                if let Some(first) = themes.first() {
-                    let _ = self.theme.set_active(first);
-                }
-            }
-            Some(current) => {
-                let active_key = current.name.to_lowercase().replace(' ', "-");
-                let pos = themes.iter().position(|t| t == &active_key).unwrap_or(0);
-                if pos + 1 >= themes.len() {
-                    // Wrap back to terminal native
-                    self.theme.clear_active();
-                } else {
-                    let next = &themes[pos + 1];
-                    let _ = self.theme.set_active(next);
-                }
             }
         }
     }
