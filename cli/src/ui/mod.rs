@@ -7,7 +7,7 @@ pub mod vault_picker;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -50,7 +50,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
 fn draw_help(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
-    let full = f.size();
+    let full = f.area();
 
     let bg = Block::default().style(tb.bg());
     f.render_widget(bg, full);
@@ -156,7 +156,6 @@ fn draw_help(f: &mut Frame, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
         .border_style(tb.border())
         .title(Span::styled(" Keybindings ", tb.title()))
         .title_alignment(Alignment::Center)
@@ -168,7 +167,7 @@ fn draw_help(f: &mut Frame, app: &App) {
 
 fn draw_delete_confirm(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
-    let full = f.size();
+    let full = f.area();
 
     // Find the entry title for the confirmation message
     let title_str = if let Some(id) = app.confirm_delete {
@@ -219,7 +218,6 @@ fn draw_delete_confirm(f: &mut Frame, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
         .border_style(tb.red())
         .title(Span::styled(" Confirm Delete ", tb.red()))
         .title_alignment(Alignment::Center)

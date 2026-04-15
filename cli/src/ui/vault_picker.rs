@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::Modifier,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
@@ -10,7 +10,7 @@ use crate::app::App;
 
 pub fn draw(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
-    let full = f.size();
+    let full = f.area();
 
     // Background
     let bg = Block::default().style(tb.bg());
@@ -31,7 +31,6 @@ pub fn draw(f: &mut Frame, app: &App) {
     let title_text = format!(" Select Vault  {path_str} ");
     let title_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
         .border_style(tb.border())
         .style(tb.surface());
     let title_para = Paragraph::new(Span::styled(title_text, tb.title()))
@@ -43,7 +42,6 @@ pub fn draw(f: &mut Frame, app: &App) {
     let list_area = chunks[1];
     let list_block = Block::default()
         .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-        .border_type(BorderType::Rounded)
         .border_style(tb.border())
         .style(tb.bg());
     f.render_widget(list_block.clone(), list_area);

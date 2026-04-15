@@ -17,7 +17,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             let remaining = (clear_at - now).as_secs();
             let msg = format!(" Copied! Clears in {}s ", remaining);
             let line = Line::from(Span::styled(msg, tb.accent()));
-            let bar = Paragraph::new(line).style(tb.status_bar());
+            let bar = Paragraph::new(line);
             f.render_widget(bar, area);
             return;
         }
@@ -27,10 +27,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     if let Some(ref notification) = app.clipboard_notification {
         if app.clipboard_clear_at.is_none() {
             let line = Line::from(vec![
-                Span::styled(" ", tb.status_bar()),
+                Span::styled(" ", tb.muted()),
                 Span::styled(notification.clone(), tb.accent()),
             ]);
-            let bar = Paragraph::new(line).style(tb.status_bar());
+            let bar = Paragraph::new(line);
             f.render_widget(bar, area);
             return;
         }
@@ -44,6 +44,6 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 
     let line = Line::from(vec![count_span, sep, lock_status]);
 
-    let bar = Paragraph::new(line).style(tb.status_bar());
+    let bar = Paragraph::new(line);
     f.render_widget(bar, area);
 }

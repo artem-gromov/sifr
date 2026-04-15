@@ -1,27 +1,33 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, TableState},
+    widgets::{
+        Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, Table,
+        TableState,
+    },
     Frame,
 };
 
 use crate::app::App;
 use crate::theme_bridge::ThemeBridge;
 
-fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge) -> Span<'a> {
+fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge) -> Line<'a> {
     let Some(ref secret) = entry.totp_secret else {
-        return Span::raw("");
+        return Line::from("");
     };
     let Ok((code, remaining)) = sifr_core::crypto::generate_totp(secret) else {
-        return Span::styled("err", tb.red());
+        return Line::from(Span::styled("err", tb.red()));
     };
-    let display = format!("{} {} {:2}s", &code[..3], &code[3..], remaining);
-    let style = if remaining <= 5 { tb.red() } else { tb.muted() };
-    Span::styled(display, style)
+    let secs_style = if remaining <= 5 { tb.red() } else { tb.muted() };
+    Line::from(vec![
+        Span::styled(format!("{} {}", &code[..3], &code[3..]), tb.accent()),
+        Span::styled(format!(" {:2}s", remaining), secs_style),
+    ])
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let full = f.size();
+    let full = f.area();
     {
         let tb = app.theme_bridge();
         let bg = Block::default().style(tb.bg());
@@ -69,7 +75,6 @@ fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
         .border_style(tb.border())
         .title(Span::styled(format!(" Sifr  {} ", vault_name), tb.title()))
         .style(tb.surface());
@@ -80,24 +85,30 @@ fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
-    // Compute column boundaries for double-click detection BEFORE borrowing app
+    // Compute column layout for double-click detection BEFORE borrowing app.
+    // highlight_symbol "▸ " takes 2 chars on the left.
+    let highlight_w: u16 = 2;
     let border_x = area.x + 1;
-    let available = area.width.saturating_sub(2);
-    let fixed: u16 = 2 + 10 + 11 + 3; // marker + password + totp + fav
+    let padding: u16 = 4; // Padding::horizontal(2) = 2 each side
+    let spacing: u16 = 2; // column_spacing(2)
+    let available = area.width.saturating_sub(2 + padding + highlight_w); // borders + padding + marker
+    let num_gaps: u16 = 4; // 5 columns → 4 gaps
+    let fixed: u16 = 10 + 11 + 3 + num_gaps * spacing; // password + totp + fav + gaps
     let flex = available.saturating_sub(fixed);
     let title_w = (flex * 55 / 100).max(15);
     let username_w = flex.saturating_sub(title_w).max(10);
+
+    let col_start = border_x + padding / 2 + highlight_w;
     app.column_boundaries = vec![
-        border_x,
-        border_x + 2,
-        border_x + 2 + title_w,
-        border_x + 2 + title_w + username_w,
-        border_x + 2 + title_w + username_w + 10,
-        border_x + 2 + title_w + username_w + 10 + 11,
+        col_start,                                                           // Title start
+        col_start + title_w + spacing,                                       // Username start
+        col_start + title_w + spacing + username_w + spacing,                // Password start
+        col_start + title_w + spacing + username_w + spacing + 10 + spacing, // TOTP start
+        col_start + title_w + spacing + username_w + spacing + 10 + spacing + 11 + spacing, // Fav start
     ];
 
-    // Scroll: compute visible height (area minus borders minus header row)
-    let visible_height = area.height.saturating_sub(3) as usize; // 2 border + 1 header
+    // Scroll: compute visible height (area minus borders minus header minus header margin)
+    let visible_height = area.height.saturating_sub(4) as usize; // 2 border + 1 header + 1 margin
 
     // Clamp scroll offset so selected_index is visible
     if app.selected_index < app.entry_scroll_offset {
@@ -118,34 +129,26 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
         .enumerate()
         .skip(scroll_offset)
         .take(visible_height)
-        .map(|(i, e)| {
-            let marker = if i == selected { ">" } else { " " };
+        .map(|(_, e)| {
             let fav = if e.favorite { "\u{2605}" } else { " " };
             let cells = vec![
-                Cell::from(Span::styled(marker, tb.accent())),
-                Cell::from(Span::styled(e.title.clone(), tb.text())),
+                Cell::from(Span::styled(e.title.clone(), tb.accent())),
                 Cell::from(Span::styled(
                     e.username.as_deref().unwrap_or("").to_string(),
-                    tb.muted(),
+                    tb.accent(),
                 )),
                 Cell::from(Span::styled(
                     "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
-                    tb.subtext(),
+                    tb.accent(),
                 )),
                 Cell::from(totp_cell(e, &tb)),
                 Cell::from(Span::styled(fav.to_string(), tb.accent())),
             ];
-            let style = if i == selected {
-                tb.selection()
-            } else {
-                tb.bg()
-            };
-            Row::new(cells).style(style)
+            Row::new(cells)
         })
         .collect();
 
     let widths = [
-        Constraint::Length(2),          // Marker
         Constraint::Length(title_w),    // Title
         Constraint::Length(username_w), // Username
         Constraint::Length(10),         // Password
@@ -154,25 +157,28 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
     ];
 
     let header = Row::new(vec![
-        Cell::from(""),
-        Cell::from(Span::styled("Title", tb.accent())),
-        Cell::from(Span::styled("Username", tb.accent())),
-        Cell::from(Span::styled("Password", tb.accent())),
-        Cell::from(Span::styled("TOTP", tb.accent())),
-        Cell::from(Span::styled("Fav", tb.accent())),
+        Cell::from(Span::styled("Title", tb.text())),
+        Cell::from(Span::styled("Username", tb.text())),
+        Cell::from(Span::styled("Password", tb.text())),
+        Cell::from(Span::styled("TOTP", tb.text())),
+        Cell::from(Span::styled("Fav", tb.text())),
     ])
-    .style(tb.surface());
+    .style(Style::new().bold())
+    .bottom_margin(1);
 
     let table = Table::new(rows, widths)
         .header(header)
+        .column_spacing(spacing)
+        .highlight_symbol("▸ ")
+        .highlight_spacing(HighlightSpacing::Always)
+        .row_highlight_style(Style::new().bold().reversed())
         .block(
             Block::default()
                 .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-                .border_type(BorderType::Rounded)
+                .padding(Padding::horizontal(2))
                 .border_style(tb.border())
-                .style(tb.bg()),
-        )
-        .highlight_style(tb.selection());
+                .style(tb.surface())
+        );
 
     let mut state = TableState::default();
     state.select(Some(selected - scroll_offset));
@@ -218,6 +224,6 @@ fn draw_hints(f: &mut Frame, app: &App, area: Rect) {
         .border_style(tb.border());
     f.render_widget(sep, chunks[0]);
 
-    let hint_para = Paragraph::new(hints).style(tb.status_bar());
+    let hint_para = Paragraph::new(hints);
     f.render_widget(hint_para, chunks[1]);
 }

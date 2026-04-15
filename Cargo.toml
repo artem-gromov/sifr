@@ -34,8 +34,8 @@ uniffi = "0.27"
 
 # CLI / TUI
 clap = { version = "4", features = ["derive"] }
-ratatui = "0.27"
-crossterm = "0.27"
+ratatui = "0.30"
+crossterm = "0.28"
 
 # TOTP
 totp-rs = "5"

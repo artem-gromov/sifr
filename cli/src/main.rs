@@ -175,7 +175,10 @@ fn run_tui_inner(vault_path: Option<String>, vault: Option<sifr_core::Vault>) ->
     result
 }
 
-fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
+fn run_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()>
+where
+    B::Error: Send + Sync + 'static,
+{
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 

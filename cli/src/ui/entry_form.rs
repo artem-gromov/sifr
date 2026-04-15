@@ -1,7 +1,7 @@
 use ratatui::{
     layout::Alignment,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -9,7 +9,7 @@ use crate::app::App;
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let tb = app.theme_bridge();
-    let full = f.size();
+    let full = f.area();
 
     let bg = Block::default().style(tb.bg());
     f.render_widget(bg, full);
@@ -116,11 +116,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         content.push(Line::from(Span::styled(format!("  {}", err), tb.red())));
     }
 
-    content.push(Line::from(""));
-
-    // Hints
-    if editing {
-        content.push(Line::from(vec![
+    // Pad content to push hints to bottom of modal
+    let inner_height = (modal_height - 2) as usize; // subtract top/bottom border
+    let hint_line = if editing {
+        Line::from(vec![
             Span::styled("  Tab", tb.accent()),
             Span::styled(" next  ", tb.muted()),
             Span::styled("Ctrl+S", tb.accent()),
@@ -131,9 +130,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             } else {
                 Span::styled(" stop editing", tb.muted())
             },
-        ]));
+        ])
     } else {
-        content.push(Line::from(vec![
+        Line::from(vec![
             Span::styled("  j/k", tb.accent()),
             Span::styled(" navigate  ", tb.muted()),
             Span::styled("Enter", tb.accent()),
@@ -142,13 +141,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" copy  ", tb.muted()),
             Span::styled("Esc", tb.accent()),
             Span::styled(" close", tb.muted()),
-        ]));
+        ])
+    };
+    while content.len() < inner_height.saturating_sub(1) {
+        content.push(Line::from(""));
     }
-    content.push(Line::from(""));
+    content.push(hint_line);
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
         .border_style(tb.border())
         .title(Span::styled(title, tb.title()))
         .title_alignment(Alignment::Center)

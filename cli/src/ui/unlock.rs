@@ -1,7 +1,7 @@
 use ratatui::{
     layout::Alignment,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -11,7 +11,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
 
     // Full screen background
-    let full = f.size();
+    let full = f.area();
     let bg = Block::default().style(tb.bg());
     f.render_widget(bg, full);
 
@@ -148,7 +148,6 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
         .border_style(tb.border())
         .title(Span::styled(title, tb.title()))
         .title_alignment(Alignment::Center)

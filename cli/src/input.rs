@@ -97,11 +97,11 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                             if is_double {
                                 let clicked_col = determine_column(col, &app.column_boundaries);
                                 match clicked_col {
-                                    1 => {
+                                    0 => {
                                         // Title → edit entry
                                         edit_selected(app);
                                     }
-                                    2 => {
+                                    1 => {
                                         // Username → copy
                                         if let Some(e) =
                                             app.filtered_entries().get(app.selected_index)
@@ -111,7 +111,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                             app.copy_to_clipboard(&username);
                                         }
                                     }
-                                    3 => {
+                                    2 => {
                                         // Password → copy
                                         if let Some(e) =
                                             app.filtered_entries().get(app.selected_index)
@@ -121,7 +121,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                             app.copy_to_clipboard(&password);
                                         }
                                     }
-                                    4 => {
+                                    3 => {
                                         // TOTP → copy
                                         if let Some(e) =
                                             app.filtered_entries().get(app.selected_index)
