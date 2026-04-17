@@ -2,10 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, Table,
-        TableState,
-    },
+    widgets::{Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, Table, TableState},
     Frame,
 };
 
@@ -177,7 +174,7 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
                 .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
                 .padding(Padding::horizontal(2))
                 .border_style(tb.border())
-                .style(tb.surface())
+                .style(tb.surface()),
         );
 
     let mut state = TableState::default();
