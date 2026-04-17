@@ -68,14 +68,15 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     }
                 }
                 Screen::EntryList => {
-                    // Layout: row 0-2 = search bar, row 3 = table header, row 4+ = entries
+                    // Layout: row 0-2 = search bar, row 3 = table header,
+                    // row 4 = header bottom_margin, row 5+ = entries
                     let row = mouse.row as usize;
                     let col = mouse.column;
                     if row < 3 {
                         // Click on search bar → activate search
                         app.search_active = true;
-                    } else if row >= 4 {
-                        let index = app.entry_scroll_offset + (row - 4);
+                    } else if row >= 5 {
+                        let index = app.entry_scroll_offset + (row - 5);
                         let count = app.filtered_entries().len();
                         if count > 0 && index < count {
                             app.selected_index = index;
