@@ -23,10 +23,8 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             Screen::VaultPicker => {
                 picker_move_up(app);
             }
-            Screen::EntryList => {
-                if app.selected_index > 0 {
-                    app.selected_index -= 1;
-                }
+            Screen::EntryList if app.selected_index > 0 => {
+                app.selected_index -= 1;
             }
             _ => {}
         },
@@ -203,11 +201,9 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
     // When naming a new vault, intercept all key events
     if app.picker_naming.is_some() {
         match key.code {
-            KeyCode::Char(c) => {
-                if !key.modifiers.contains(KeyModifiers::CONTROL) {
-                    if let Some(ref mut name) = app.picker_naming {
-                        name.push(c);
-                    }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(ref mut name) = app.picker_naming {
+                    name.push(c);
                 }
             }
             KeyCode::Backspace => {
@@ -445,10 +441,8 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
                 app.selected_index += 1;
             }
         }
-        KeyCode::Char('k') | KeyCode::Up => {
-            if app.selected_index > 0 {
-                app.selected_index -= 1;
-            }
+        KeyCode::Char('k') | KeyCode::Up if app.selected_index > 0 => {
+            app.selected_index -= 1;
         }
         KeyCode::Enter | KeyCode::Char('e') => {
             edit_selected(app);
@@ -598,13 +592,10 @@ fn handle_form(app: &mut App, key: KeyEvent) {
                         'v' => {
                             app.form_password_visible = !app.form_password_visible;
                         }
-                        'g' => {
-                            if editing_idx == 2 {
-                                let pwd =
-                                    sifr_core::crypto::generate_password(16, true, true, true);
-                                if let Some(field) = app.form_fields.get_mut(2) {
-                                    field.value = pwd.as_str().to_string();
-                                }
+                        'g' if editing_idx == 2 => {
+                            let pwd = sifr_core::crypto::generate_password(16, true, true, true);
+                            if let Some(field) = app.form_fields.get_mut(2) {
+                                field.value = pwd.as_str().to_string();
                             }
                         }
                         's' => {
@@ -630,15 +621,13 @@ fn handle_form(app: &mut App, key: KeyEvent) {
                 app.form_fields.clear();
                 app.screen = Screen::EntryList;
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if field_count > 0 && app.form_focused + 1 < field_count {
-                    app.form_focused += 1;
-                }
+            KeyCode::Char('j') | KeyCode::Down
+                if field_count > 0 && app.form_focused + 1 < field_count =>
+            {
+                app.form_focused += 1;
             }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if app.form_focused > 0 {
-                    app.form_focused -= 1;
-                }
+            KeyCode::Char('k') | KeyCode::Up if app.form_focused > 0 => {
+                app.form_focused -= 1;
             }
             KeyCode::Enter => {
                 app.form_editing_field = Some(app.form_focused);
