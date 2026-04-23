@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::app::{App, UnlockMode};
+use crate::ui::format_inline_input;
 
 pub fn draw(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
@@ -27,36 +28,48 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Clear behind modal
     f.render_widget(Clear, area);
 
-    // Input box inner width adapts to modal
-    let box_inner = (modal_width as usize).saturating_sub(8).max(20);
-
-    let password_display = if app.password_visible {
-        app.password_input.as_str().to_owned()
-    } else {
-        "\u{2022}".repeat(app.password_input.len())
-    };
-
-    let confirm_display = if app.password_visible {
-        app.password_confirm.as_str().to_owned()
-    } else {
-        "\u{2022}".repeat(app.password_confirm.len())
-    };
+    // Keep input on the same line as label.
+    let box_inner = (modal_width as usize).saturating_sub(24).max(12);
 
     // Cursor marker on the active field
     let pw_active = !is_create || !app.confirm_active;
     let confirm_active = is_create && app.confirm_active;
 
     let pw_text = if pw_active {
-        format!("{}▌", password_display)
+        format_inline_input(
+            app.password_input.as_str(),
+            app.password_cursor,
+            box_inner,
+            !app.password_visible,
+            true,
+        )
     } else {
-        password_display
+        format_inline_input(
+            app.password_input.as_str(),
+            app.password_input.chars().count(),
+            box_inner,
+            !app.password_visible,
+            false,
+        )
     };
     let input_line = format!("[{:<width$}]", pw_text, width = box_inner);
 
     let confirm_text = if confirm_active {
-        format!("{}▌", confirm_display)
+        format_inline_input(
+            app.password_confirm.as_str(),
+            app.password_confirm_cursor,
+            box_inner,
+            !app.password_visible,
+            true,
+        )
     } else {
-        confirm_display
+        format_inline_input(
+            app.password_confirm.as_str(),
+            app.password_confirm.chars().count(),
+            box_inner,
+            !app.password_visible,
+            false,
+        )
     };
     let confirm_line = format!("[{:<width$}]", confirm_text, width = box_inner);
 
@@ -71,9 +84,8 @@ pub fn draw(f: &mut Frame, app: &App) {
 
         // Password field
         let pw_style = if pw_active { tb.accent() } else { tb.muted() };
-        content.push(Line::from(Span::styled("  Master Password:", tb.text())));
         content.push(Line::from(Span::styled(
-            format!("  {}", input_line),
+            format!("  Master Password: {}", input_line),
             pw_style,
         )));
         content.push(Line::from(""));
@@ -84,9 +96,8 @@ pub fn draw(f: &mut Frame, app: &App) {
         } else {
             tb.muted()
         };
-        content.push(Line::from(Span::styled("  Confirm Password:", tb.text())));
         content.push(Line::from(Span::styled(
-            format!("  {}", confirm_line),
+            format!("  Confirm Password: {}", confirm_line),
             cf_style,
         )));
         content.push(Line::from(""));
@@ -101,9 +112,8 @@ pub fn draw(f: &mut Frame, app: &App) {
             tb.subtext(),
         )));
         content.push(Line::from(""));
-        content.push(Line::from(Span::styled("  Master Password:", tb.text())));
         content.push(Line::from(Span::styled(
-            format!("  {}", input_line),
+            format!("  Master Password: {}", input_line),
             tb.accent(),
         )));
         content.push(Line::from(""));

@@ -15,7 +15,8 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         let now = std::time::Instant::now();
         if now < clear_at {
             let remaining = (clear_at - now).as_secs();
-            let msg = format!(" Copied! Clears in {}s ", remaining);
+            let label = app.clipboard_notification.as_deref().unwrap_or("Copied");
+            let msg = format!(" {} \u{2022} clears in {}s ", label, remaining);
             let line = Line::from(Span::styled(msg, tb.accent()));
             let bar = Paragraph::new(line);
             f.render_widget(bar, area);

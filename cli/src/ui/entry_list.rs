@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::app::App;
 use crate::theme_bridge::ThemeBridge;
+use crate::ui::format_inline_input;
 
 fn totp_cell<'a>(entry: &sifr_core::models::Entry, tb: &ThemeBridge) -> Line<'a> {
     let Some(ref secret) = entry.totp_secret else {
@@ -57,7 +58,9 @@ fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
         .unwrap_or(&app.vault_path);
 
     let search_content = if app.search_active {
-        format!("Search: {}_", query)
+        let width = area.width.saturating_sub(14) as usize;
+        let inline = format_inline_input(query, app.search_cursor, width.max(8), false, true);
+        format!("Search: {}", inline)
     } else if query.is_empty() {
         "Search: (press / to search)".into()
     } else {

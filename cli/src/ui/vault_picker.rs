@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
+use crate::ui::format_inline_input;
 
 pub fn draw(f: &mut Frame, app: &App) {
     let tb = app.theme_bridge();
@@ -116,16 +117,10 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // ── Naming input (shown when naming a new vault) ───────────────────────
     if let Some(ref name) = app.picker_naming {
+        let input = format_inline_input(name, app.picker_naming_cursor, 20, false, true);
         let name_line = Line::from(vec![
             Span::styled("  New vault: [", tb.muted()),
-            Span::styled(
-                format!(
-                    "{}\u{258c}{}",
-                    name,
-                    " ".repeat(20usize.saturating_sub(name.len() + 1))
-                ),
-                tb.accent(),
-            ),
+            Span::styled(input, tb.accent()),
             Span::styled("]", tb.muted()),
         ]);
         let name_area = ratatui::layout::Rect {
