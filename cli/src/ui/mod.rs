@@ -13,6 +13,46 @@ use ratatui::{
 
 use crate::app::{App, Screen};
 
+pub fn format_inline_input(
+    value: &str,
+    cursor: usize,
+    width: usize,
+    mask: bool,
+    show_cursor: bool,
+) -> String {
+    let rendered = if mask {
+        "\u{2022}".repeat(value.chars().count())
+    } else {
+        value.to_string()
+    };
+
+    let chars: Vec<char> = rendered.chars().collect();
+    let cursor = cursor.min(chars.len());
+    let text_width = if show_cursor {
+        width.saturating_sub(1)
+    } else {
+        width
+    };
+    let mut start = cursor.saturating_sub(text_width);
+    if chars.len().saturating_sub(start) > text_width {
+        start = chars.len().saturating_sub(text_width);
+    }
+    let end = (start + text_width).min(chars.len());
+
+    let mut visible: Vec<char> = chars[start..end].to_vec();
+    let cursor_pos = cursor.saturating_sub(start).min(visible.len());
+    if show_cursor {
+        visible.insert(cursor_pos, '\u{258c}');
+    }
+
+    let mut text: String = visible.into_iter().collect();
+    let count = text.chars().count();
+    if count < width {
+        text.push_str(&" ".repeat(width - count));
+    }
+    text
+}
+
 pub fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)

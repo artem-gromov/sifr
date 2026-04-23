@@ -1,4 +1,5 @@
 use crate::theme_bridge::ThemeBridge;
+use ratatui_textarea::TextArea;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
@@ -44,6 +45,7 @@ pub struct App {
     pub running: bool,
     pub vault_path: String,
     pub search_query: String,
+    pub search_cursor: usize,
     pub search_active: bool,
     pub selected_index: usize,
     pub vault: Option<sifr_core::Vault>,
@@ -53,6 +55,8 @@ pub struct App {
     pub started_from_picker: bool,
     pub password_input: zeroize::Zeroizing<String>,
     pub password_confirm: zeroize::Zeroizing<String>,
+    pub password_cursor: usize,
+    pub password_confirm_cursor: usize,
     pub confirm_active: bool,
     pub password_visible: bool,
     pub unlock_mode: UnlockMode,
@@ -67,18 +71,25 @@ pub struct App {
     pub picker_selected: usize,
     pub picker_scroll_offset: usize,
     pub picker_naming: Option<String>,
+    pub picker_naming_cursor: usize,
     // Entry form state
     pub form_fields: Vec<FormField>,
     pub form_focused: usize,
     pub form_editing_id: Option<i64>,
     pub form_editing_field: Option<usize>,
-    pub form_password_visible: bool,
+    pub form_field_cursors: Vec<usize>,
     pub form_created_at: i64,
     pub form_updated_at: i64,
     pub form_modal_area: Option<ratatui::layout::Rect>,
     pub confirm_delete: Option<i64>,
     pub filtered_indices: Vec<usize>,
     pub entry_scroll_offset: usize,
+    // Maps form field index → row range (start_y, end_y) for mouse detection
+    pub form_field_rows: Vec<(u16, u16)>,
+    // TOTP code row range for click detection
+    pub form_totp_row: Option<(u16, u16)>,
+    // Notes field textarea when editing notes (field index 5)
+    pub form_notes_textarea: Option<TextArea<'static>>,
 }
 
 impl App {
@@ -89,6 +100,7 @@ impl App {
             running: true,
             vault_path,
             search_query: String::new(),
+            search_cursor: 0,
             search_active: false,
             selected_index: 0,
             vault: None,
@@ -98,6 +110,8 @@ impl App {
             started_from_picker: false,
             password_input: zeroize::Zeroizing::new(String::new()),
             password_confirm: zeroize::Zeroizing::new(String::new()),
+            password_cursor: 0,
+            password_confirm_cursor: 0,
             confirm_active: false,
             password_visible: false,
             unlock_mode: UnlockMode::Open,
@@ -110,17 +124,21 @@ impl App {
             picker_selected: 0,
             picker_scroll_offset: 0,
             picker_naming: None,
+            picker_naming_cursor: 0,
             form_fields: Vec::new(),
             form_focused: 0,
             form_editing_id: None,
             form_editing_field: None,
-            form_password_visible: false,
+            form_field_cursors: Vec::new(),
             form_created_at: 0,
             form_updated_at: 0,
             form_modal_area: None,
             confirm_delete: None,
             filtered_indices: Vec::new(),
             entry_scroll_offset: 0,
+            form_field_rows: Vec::new(),
+            form_totp_row: None,
+            form_notes_textarea: None,
         };
         app.refresh_picker();
         app
@@ -247,11 +265,11 @@ impl App {
         }
     }
 
-    pub fn copy_to_clipboard(&mut self, text: &str) {
+    pub fn copy_to_clipboard(&mut self, text: &str, label: &str) {
         match arboard::Clipboard::new() {
             Ok(mut clipboard) => {
                 if clipboard.set_text(text.to_string()).is_ok() {
-                    self.clipboard_notification = Some("Copied! Auto-clears in 30s".into());
+                    self.clipboard_notification = Some(format!("Copied {}", label));
                     self.clipboard_clear_at =
                         Some(std::time::Instant::now() + std::time::Duration::from_secs(30));
                 } else {
@@ -298,6 +316,12 @@ impl App {
                 secret: true,
             },
             FormField {
+                label: "TOTP Secret".to_string(),
+                value: String::new(),
+                required: false,
+                secret: true,
+            },
+            FormField {
                 label: "URL".to_string(),
                 value: String::new(),
                 required: false,
@@ -309,24 +333,23 @@ impl App {
                 required: false,
                 secret: false,
             },
-            FormField {
-                label: "TOTP Secret".to_string(),
-                value: String::new(),
-                required: false,
-                secret: true,
-            },
         ]
     }
 
     pub fn init_add_form(&mut self) {
         self.form_fields = Self::make_form_fields();
+        self.form_field_cursors = self
+            .form_fields
+            .iter()
+            .map(|f| f.value.chars().count())
+            .collect();
         self.form_focused = 0;
         self.form_editing_id = None;
         self.form_editing_field = Some(0);
-        self.form_password_visible = false;
         self.form_created_at = 0;
         self.form_updated_at = 0;
         self.form_modal_area = None;
+        self.form_notes_textarea = None;
         self.error_message = None;
         self.error_clear_at = None;
         self.screen = Screen::AddEntry;
@@ -337,17 +360,22 @@ impl App {
         fields[0].value = entry.title.clone();
         fields[1].value = entry.username.as_deref().unwrap_or("").to_string();
         fields[2].value = entry.password.as_deref().unwrap_or("").to_string();
-        fields[3].value = entry.url.as_deref().unwrap_or("").to_string();
-        fields[4].value = entry.notes.as_deref().unwrap_or("").to_string();
-        fields[5].value = entry.totp_secret.as_deref().unwrap_or("").to_string();
+        fields[3].value = entry.totp_secret.as_deref().unwrap_or("").to_string();
+        fields[4].value = entry.url.as_deref().unwrap_or("").to_string();
+        fields[5].value = entry.notes.as_deref().unwrap_or("").to_string();
         self.form_fields = fields;
+        self.form_field_cursors = self
+            .form_fields
+            .iter()
+            .map(|f| f.value.chars().count())
+            .collect();
         self.form_focused = 0;
         self.form_editing_id = Some(entry.id);
         self.form_editing_field = None;
-        self.form_password_visible = false;
         self.form_created_at = entry.created_at;
         self.form_updated_at = entry.updated_at;
         self.form_modal_area = None;
+        self.form_notes_textarea = None;
         self.error_message = None;
         self.error_clear_at = None;
         self.screen = Screen::EditEntry;

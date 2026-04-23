@@ -1,6 +1,43 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui_textarea::{Input as TextAreaInput, Key as TextAreaKey, TextArea};
+use tui_input::Input as TuiInput;
+use tui_input::backend::crossterm::to_input_request;
 
 use crate::app::{App, Screen, UnlockMode};
+
+const NOTES_FIELD_INDEX: usize = 5;
+
+fn apply_tui_input_to_string(value: &mut String, cursor: &mut usize, key: KeyEvent) -> bool {
+    let event = crossterm::event::Event::Key(key);
+    let Some(req) = to_input_request(&event) else {
+        return false;
+    };
+
+    let mut input = TuiInput::new(std::mem::take(value)).with_cursor(*cursor);
+    let changed = input.handle(req).is_some();
+    *cursor = input.cursor();
+    *value = input.to_string();
+    changed
+}
+
+fn apply_tui_input_to_secret(
+    value: &mut zeroize::Zeroizing<String>,
+    cursor: &mut usize,
+    key: KeyEvent,
+) -> bool {
+    let event = crossterm::event::Event::Key(key);
+    let Some(req) = to_input_request(&event) else {
+        return false;
+    };
+
+    let mut raw = std::mem::take(&mut **value);
+    let mut input = TuiInput::new(raw).with_cursor(*cursor);
+    let changed = input.handle(req).is_some();
+    *cursor = input.cursor();
+    raw = input.to_string();
+    **value = raw;
+    changed
+}
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
     // Delete confirmation overlay takes priority
@@ -75,6 +112,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     if row < 3 {
                         // Click on search bar → activate search
                         app.search_active = true;
+                        app.search_cursor = app.search_query.chars().count();
                     } else if row >= 5 {
                         let index = app.entry_scroll_offset + (row - 5);
                         let count = app.filtered_entries().len();
@@ -107,7 +145,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                         {
                                             let username =
                                                 e.username.as_deref().unwrap_or("").to_string();
-                                            app.copy_to_clipboard(&username);
+                                            app.copy_to_clipboard(&username, "username");
                                         }
                                     }
                                     2 => {
@@ -117,7 +155,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                         {
                                             let password =
                                                 e.password.as_deref().unwrap_or("").to_string();
-                                            app.copy_to_clipboard(&password);
+                                            app.copy_to_clipboard(&password, "password");
                                         }
                                     }
                                     3 => {
@@ -129,7 +167,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                                 if let Ok((code, _)) =
                                                     sifr_core::crypto::generate_totp(secret)
                                                 {
-                                                    app.copy_to_clipboard(&code);
+                                                    app.copy_to_clipboard(&code, "TOTP code");
                                                 }
                                             }
                                         }
@@ -148,16 +186,78 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     app.screen = Screen::EntryList;
                 }
                 Screen::AddEntry | Screen::EditEntry => {
-                    // Click outside modal → close form
                     if let Some(area) = app.form_modal_area {
                         if mouse.row < area.y
                             || mouse.row >= area.y + area.height
                             || mouse.column < area.x
                             || mouse.column >= area.x + area.width
                         {
+                            // Click outside modal → close form
                             app.zeroize_form_password();
                             app.form_fields.clear();
+                            app.form_field_cursors.clear();
+                            app.form_notes_textarea = None;
                             app.screen = Screen::EntryList;
+                        } else {
+                            // Click inside modal → detect which field or TOTP row
+                            let clicked_field = app
+                                .form_field_rows
+                                .iter()
+                                .position(|(start, end)| mouse.row >= *start && mouse.row < *end);
+
+                            let clicked_totp = app
+                                .form_totp_row
+                                .map(|(start, end)| mouse.row >= start && mouse.row < end)
+                                .unwrap_or(false);
+
+                            let now = std::time::Instant::now();
+                            let is_double =
+                                if let Some((last_time, last_col, last_row)) = app.last_click {
+                                    now.duration_since(last_time).as_millis() < 500
+                                        && last_row == mouse.row
+                                        && (last_col as i32 - mouse.column as i32)
+                                            .unsigned_abs()
+                                            < 5
+                                } else {
+                                    false
+                                };
+
+                            if let Some(field_idx) = clicked_field {
+                                app.form_focused = field_idx;
+
+                                if is_double {
+                                    // Double-click → copy field value
+                                    if let Some(field) = app.form_fields.get(field_idx) {
+                                        let val = field.value.clone();
+                                        let label = field.label.to_lowercase();
+                                        app.copy_to_clipboard(&val, &label);
+                                    }
+                                    app.last_click = None;
+                                } else {
+                                    app.last_click =
+                                        Some((now, mouse.column, mouse.row));
+                                }
+                            } else if clicked_totp {
+                                if is_double {
+                                    // Double-click on TOTP code → copy it
+                                    let totp_secret = app
+                                        .form_fields
+                                        .get(3)
+                                        .map(|f| f.value.as_str())
+                                        .unwrap_or("");
+                                    if !totp_secret.is_empty() {
+                                        if let Ok((code, _)) =
+                                            sifr_core::crypto::generate_totp(totp_secret)
+                                        {
+                                            app.copy_to_clipboard(&code, "TOTP code");
+                                        }
+                                    }
+                                    app.last_click = None;
+                                } else {
+                                    app.last_click =
+                                        Some((now, mouse.column, mouse.row));
+                                }
+                            }
                         }
                     }
                 }
@@ -202,16 +302,6 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
     // When naming a new vault, intercept all key events
     if app.picker_naming.is_some() {
         match key.code {
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(ref mut name) = app.picker_naming {
-                    name.push(c);
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(ref mut name) = app.picker_naming {
-                    name.pop();
-                }
-            }
             KeyCode::Enter => {
                 if let Some(name) = app.picker_naming.take() {
                     if !name.is_empty() {
@@ -226,16 +316,24 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
                         app.confirm_active = false;
                         app.password_input.clear();
                         app.password_confirm.clear();
+                        app.password_cursor = 0;
+                        app.password_confirm_cursor = 0;
                         app.screen = Screen::Unlock;
                     } else {
                         app.picker_naming = None;
+                        app.picker_naming_cursor = 0;
                     }
                 }
             }
             KeyCode::Esc => {
                 app.picker_naming = None;
+                app.picker_naming_cursor = 0;
             }
-            _ => {}
+            _ => {
+                if let Some(ref mut name) = app.picker_naming {
+                    let _ = apply_tui_input_to_string(name, &mut app.picker_naming_cursor, key);
+                }
+            }
         }
         return;
     }
@@ -252,6 +350,7 @@ fn handle_vault_picker(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('n') => {
             app.picker_naming = Some(String::new());
+            app.picker_naming_cursor = 0;
         }
         KeyCode::Char('~') => {
             if let Some(home) = home_dir() {
@@ -284,11 +383,13 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                         return;
                     }
                     app.confirm_active = true;
+                    app.password_confirm_cursor = app.password_confirm.chars().count();
                 } else {
                     // Second Enter: compare and create
                     if app.password_input != app.password_confirm {
                         app.set_error("Passwords don't match");
                         *app.password_confirm = String::new();
+                        app.password_confirm_cursor = 0;
                         app.confirm_active = false;
                         return;
                     }
@@ -304,6 +405,8 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                             crate::config::save_last_vault(&path);
                             *app.password_input = String::new();
                             *app.password_confirm = String::new();
+                            app.password_cursor = 0;
+                            app.password_confirm_cursor = 0;
                             app.confirm_active = false;
                             app.screen = Screen::EntryList;
                         }
@@ -311,6 +414,8 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                             app.set_error(&e.to_string());
                             *app.password_input = String::new();
                             *app.password_confirm = String::new();
+                            app.password_cursor = 0;
+                            app.password_confirm_cursor = 0;
                             app.confirm_active = false;
                         }
                     }
@@ -336,27 +441,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                     }
                 }
                 *app.password_input = String::new();
-            }
-        }
-        KeyCode::Char(c) => {
-            if key.modifiers.contains(KeyModifiers::CONTROL) && c == 'c' {
-                app.running = false;
-            } else {
-                // Clear error when user types
-                app.error_message = None;
-                app.error_clear_at = None;
-                if app.unlock_mode == UnlockMode::Create && app.confirm_active {
-                    app.password_confirm.push(c);
-                } else {
-                    app.password_input.push(c);
-                }
-            }
-        }
-        KeyCode::Backspace => {
-            if app.unlock_mode == UnlockMode::Create && app.confirm_active {
-                app.password_confirm.pop();
-            } else {
-                app.password_input.pop();
+                app.password_cursor = 0;
             }
         }
         KeyCode::Tab => {
@@ -366,6 +451,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
             } else {
                 // Open mode: switch to vault picker to choose a different file
                 *app.password_input = String::new();
+                app.password_cursor = 0;
                 app.started_from_picker = true;
                 app.screen = Screen::VaultPicker;
             }
@@ -375,13 +461,27 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                 // Go back to password field
                 app.confirm_active = false;
                 *app.password_confirm = String::new();
+                app.password_confirm_cursor = 0;
             } else if app.started_from_picker {
                 app.screen = Screen::VaultPicker;
             } else {
                 app.running = false;
             }
         }
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.running = false;
+        }
         _ => {}
+    }
+
+    let changed = if app.unlock_mode == UnlockMode::Create && app.confirm_active {
+        apply_tui_input_to_secret(&mut app.password_confirm, &mut app.password_confirm_cursor, key)
+    } else {
+        apply_tui_input_to_secret(&mut app.password_input, &mut app.password_cursor, key)
+    };
+    if changed {
+        app.error_message = None;
+        app.error_clear_at = None;
     }
 }
 
@@ -404,17 +504,14 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             KeyCode::Enter => {
                 app.search_active = false;
             }
-            KeyCode::Backspace => {
-                app.search_query.pop();
-                app.selected_index = 0;
-                app.refilter();
+            _ => {
+                let changed =
+                    apply_tui_input_to_string(&mut app.search_query, &mut app.search_cursor, key);
+                if changed {
+                    app.selected_index = 0;
+                    app.refilter();
+                }
             }
-            KeyCode::Char(c) => {
-                app.search_query.push(c);
-                app.selected_index = 0;
-                app.refilter();
-            }
-            _ => {}
         }
         return;
     }
@@ -427,6 +524,7 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             if !app.search_query.is_empty() {
                 // Clear search filter
                 app.search_query.clear();
+                app.search_cursor = 0;
                 app.selected_index = 0;
                 app.refilter();
             } else {
@@ -450,6 +548,7 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('/') => {
             app.search_active = true;
+            app.search_cursor = app.search_query.chars().count();
         }
         KeyCode::Char('a') => {
             app.init_add_form();
@@ -468,7 +567,7 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             if let Some(id) = entry_id {
                 if let Some(ref vault) = app.vault {
                     match vault.get_totp_code(id) {
-                        Ok((code, _)) => app.copy_to_clipboard(&code),
+                        Ok((code, _)) => app.copy_to_clipboard(&code, "TOTP code"),
                         Err(_) => app.set_error("No TOTP configured for this entry"),
                     }
                 }
@@ -477,13 +576,13 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
         KeyCode::Char('y') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
                 let password = e.password.as_deref().unwrap_or("").to_string();
-                app.copy_to_clipboard(&password);
+                app.copy_to_clipboard(&password, "password");
             }
         }
         KeyCode::Char('u') => {
             if let Some(e) = app.filtered_entries().get(app.selected_index) {
                 let username = e.username.as_deref().unwrap_or("").to_string();
-                app.copy_to_clipboard(&username);
+                app.copy_to_clipboard(&username, "username");
             }
         }
         KeyCode::Char('f') => {
@@ -517,8 +616,10 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
             app.selected_index = 0;
             app.entry_scroll_offset = 0;
             app.search_query.clear();
+            app.search_cursor = 0;
             app.search_active = false;
             *app.password_input = String::new();
+            app.password_cursor = 0;
             if app.started_from_picker {
                 app.screen = Screen::VaultPicker;
             } else {
@@ -549,11 +650,129 @@ fn non_empty(s: &str) -> Option<String> {
     }
 }
 
+fn ensure_notes_textarea(app: &mut App) {
+    if app.form_notes_textarea.is_some() {
+        return;
+    }
+
+    let lines = app
+        .form_fields
+        .get(NOTES_FIELD_INDEX)
+        .map(|f| {
+            if f.value.is_empty() {
+                vec![String::new()]
+            } else {
+                f.value.lines().map(|s| s.to_string()).collect()
+            }
+        })
+        .unwrap_or_else(|| vec![String::new()]);
+    app.form_notes_textarea = Some(TextArea::new(lines));
+}
+
+fn sync_notes_textarea(app: &mut App) {
+    let Some(textarea) = app.form_notes_textarea.take() else {
+        return;
+    };
+    let text = textarea.into_lines().join("\n");
+    if let Some(field) = app.form_fields.get_mut(NOTES_FIELD_INDEX) {
+        field.value = text;
+    }
+}
+
+fn key_event_to_textarea_input(key: KeyEvent) -> TextAreaInput {
+    let mut shift = key.modifiers.contains(KeyModifiers::SHIFT);
+    let mapped_key = match key.code {
+        KeyCode::Backspace => TextAreaKey::Backspace,
+        KeyCode::Enter => TextAreaKey::Enter,
+        KeyCode::Left => TextAreaKey::Left,
+        KeyCode::Right => TextAreaKey::Right,
+        KeyCode::Up => TextAreaKey::Up,
+        KeyCode::Down => TextAreaKey::Down,
+        KeyCode::Tab => TextAreaKey::Tab,
+        KeyCode::BackTab => {
+            shift = true;
+            TextAreaKey::Tab
+        }
+        KeyCode::Delete => TextAreaKey::Delete,
+        KeyCode::Home => TextAreaKey::Home,
+        KeyCode::End => TextAreaKey::End,
+        KeyCode::PageUp => TextAreaKey::PageUp,
+        KeyCode::PageDown => TextAreaKey::PageDown,
+        KeyCode::Esc => TextAreaKey::Esc,
+        KeyCode::F(n) => TextAreaKey::F(n),
+        KeyCode::Char(c) => TextAreaKey::Char(c),
+        _ => TextAreaKey::Null,
+    };
+
+    TextAreaInput {
+        key: mapped_key,
+        ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
+        alt: key.modifiers.contains(KeyModifiers::ALT),
+        shift,
+    }
+}
+
 fn handle_form(app: &mut App, key: KeyEvent) {
     let field_count = app.form_fields.len();
     let is_add = app.form_editing_id.is_none();
 
     if let Some(editing_idx) = app.form_editing_field {
+        if editing_idx == NOTES_FIELD_INDEX {
+            ensure_notes_textarea(app);
+            match key.code {
+                KeyCode::Esc => {
+                    if is_add {
+                        app.zeroize_form_password();
+                        app.form_fields.clear();
+                        app.form_field_cursors.clear();
+                        app.form_notes_textarea = None;
+                        app.screen = Screen::EntryList;
+                    } else {
+                        sync_notes_textarea(app);
+                        app.form_editing_field = None;
+                    }
+                }
+                KeyCode::Tab | KeyCode::Down => {
+                    sync_notes_textarea(app);
+                    let next = (editing_idx + 1) % field_count;
+                    app.form_focused = next;
+                    app.form_editing_field = Some(next);
+                    if next == NOTES_FIELD_INDEX {
+                        ensure_notes_textarea(app);
+                    }
+                }
+                KeyCode::BackTab | KeyCode::Up => {
+                    sync_notes_textarea(app);
+                    let prev = if editing_idx == 0 {
+                        field_count - 1
+                    } else {
+                        editing_idx - 1
+                    };
+                    app.form_focused = prev;
+                    app.form_editing_field = Some(prev);
+                    if prev == NOTES_FIELD_INDEX {
+                        ensure_notes_textarea(app);
+                    }
+                }
+                KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => match c {
+                    'c' => app.running = false,
+                    's' => {
+                        sync_notes_textarea(app);
+                        submit_form(app);
+                    }
+                    _ => {}
+                },
+                _ => {
+                    app.error_message = None;
+                    app.error_clear_at = None;
+                    if let Some(textarea) = app.form_notes_textarea.as_mut() {
+                        let _ = textarea.input(key_event_to_textarea_input(key));
+                    }
+                }
+            }
+            return;
+        }
+
         // Editing a specific field
         match key.code {
             KeyCode::Esc => {
@@ -561,6 +780,8 @@ fn handle_form(app: &mut App, key: KeyEvent) {
                     // Cancel add entirely
                     app.zeroize_form_password();
                     app.form_fields.clear();
+                    app.form_field_cursors.clear();
+                    app.form_notes_textarea = None;
                     app.screen = Screen::EntryList;
                 } else {
                     // Back to view mode
@@ -571,6 +792,9 @@ fn handle_form(app: &mut App, key: KeyEvent) {
                 let next = (editing_idx + 1) % field_count;
                 app.form_focused = next;
                 app.form_editing_field = Some(next);
+                if next == NOTES_FIELD_INDEX {
+                    ensure_notes_textarea(app);
+                }
             }
             KeyCode::BackTab | KeyCode::Up => {
                 let prev = if editing_idx == 0 {
@@ -580,23 +804,21 @@ fn handle_form(app: &mut App, key: KeyEvent) {
                 };
                 app.form_focused = prev;
                 app.form_editing_field = Some(prev);
-            }
-            KeyCode::Backspace => {
-                if let Some(field) = app.form_fields.get_mut(editing_idx) {
-                    field.value.pop();
+                if prev == NOTES_FIELD_INDEX {
+                    ensure_notes_textarea(app);
                 }
             }
             KeyCode::Char(c) => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     match c {
                         'c' => app.running = false,
-                        'v' => {
-                            app.form_password_visible = !app.form_password_visible;
-                        }
                         'g' if editing_idx == 2 => {
                             let pwd = sifr_core::crypto::generate_password(16, true, true, true);
                             if let Some(field) = app.form_fields.get_mut(2) {
                                 field.value = pwd.as_str().to_string();
+                                if let Some(cursor) = app.form_field_cursors.get_mut(2) {
+                                    *cursor = field.value.chars().count();
+                                }
                             }
                         }
                         's' => {
@@ -605,14 +827,36 @@ fn handle_form(app: &mut App, key: KeyEvent) {
                         _ => {}
                     }
                 } else {
-                    app.error_message = None;
-                    app.error_clear_at = None;
+                    let fields_len = app.form_fields.len();
+                    if app.form_field_cursors.len() <= editing_idx {
+                        app.form_field_cursors.resize(fields_len, 0);
+                    }
                     if let Some(field) = app.form_fields.get_mut(editing_idx) {
-                        field.value.push(c);
+                        if let Some(cursor) = app.form_field_cursors.get_mut(editing_idx) {
+                            let changed = apply_tui_input_to_string(&mut field.value, cursor, key);
+                            if changed {
+                                app.error_message = None;
+                                app.error_clear_at = None;
+                            }
+                        }
                     }
                 }
             }
-            _ => {}
+            _ => {
+                let fields_len = app.form_fields.len();
+                if app.form_field_cursors.len() <= editing_idx {
+                    app.form_field_cursors.resize(fields_len, 0);
+                }
+                if let Some(field) = app.form_fields.get_mut(editing_idx) {
+                    if let Some(cursor) = app.form_field_cursors.get_mut(editing_idx) {
+                        let changed = apply_tui_input_to_string(&mut field.value, cursor, key);
+                        if changed {
+                            app.error_message = None;
+                            app.error_clear_at = None;
+                        }
+                    }
+                }
+            }
         }
     } else {
         // View/detail mode (form_editing_field is None)
@@ -620,6 +864,8 @@ fn handle_form(app: &mut App, key: KeyEvent) {
             KeyCode::Esc => {
                 app.zeroize_form_password();
                 app.form_fields.clear();
+                app.form_field_cursors.clear();
+                app.form_notes_textarea = None;
                 app.screen = Screen::EntryList;
             }
             KeyCode::Char('j') | KeyCode::Down
@@ -632,18 +878,19 @@ fn handle_form(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 app.form_editing_field = Some(app.form_focused);
+                if app.form_focused == NOTES_FIELD_INDEX {
+                    ensure_notes_textarea(app);
+                }
             }
             KeyCode::Char('y') => {
                 if let Some(field) = app.form_fields.get(app.form_focused) {
                     let val = field.value.clone();
-                    app.copy_to_clipboard(&val);
+                    let label = field.label.to_lowercase();
+                    app.copy_to_clipboard(&val, &label);
                 }
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 app.running = false;
-            }
-            KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.form_password_visible = !app.form_password_visible;
             }
             _ => {}
         }
@@ -651,6 +898,10 @@ fn handle_form(app: &mut App, key: KeyEvent) {
 }
 
 fn submit_form(app: &mut App) {
+    if app.form_editing_field == Some(NOTES_FIELD_INDEX) {
+        sync_notes_textarea(app);
+    }
+
     // Validate required fields
     let title = app
         .form_fields
@@ -672,17 +923,17 @@ fn submit_form(app: &mut App) {
         .get(2)
         .map(|f| non_empty(f.value.trim()))
         .unwrap_or(None);
-    let url = app
+    let totp_secret = app
         .form_fields
         .get(3)
         .map(|f| non_empty(f.value.trim()))
         .unwrap_or(None);
-    let notes = app
+    let url = app
         .form_fields
         .get(4)
         .map(|f| non_empty(f.value.trim()))
         .unwrap_or(None);
-    let totp_secret = app
+    let notes = app
         .form_fields
         .get(5)
         .map(|f| non_empty(f.value.trim()))
@@ -705,6 +956,8 @@ fn submit_form(app: &mut App) {
                 Ok(_) => {
                     app.zeroize_form_password();
                     app.form_fields.clear();
+                    app.form_field_cursors.clear();
+                    app.form_notes_textarea = None;
                     app.form_editing_id = None;
                     app.refresh_entries();
                     app.screen = Screen::EntryList;
@@ -730,6 +983,8 @@ fn submit_form(app: &mut App) {
                 Ok(_) => {
                     app.zeroize_form_password();
                     app.form_fields.clear();
+                    app.form_field_cursors.clear();
+                    app.form_notes_textarea = None;
                     app.refresh_entries();
                     app.screen = Screen::EntryList;
                 }
