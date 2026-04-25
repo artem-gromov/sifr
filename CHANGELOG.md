@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.0 - 2026-04-25
+
+### Added
+
+- `sifr export <vault>` - Export vault entries to JSON
+- `sifr import <vault>` - Import entries from CSV (format: title,username,password,url,notes,totp_secret)
+- Auto-lock vault after 5 minutes of inactivity
+- Password strength indicator (Weak/Medium/Strong) in entry form
+- Scrollable help screen with j/k keys and scrollbar
+- Scrollbar in entry list for long lists
+- `sifr gen --quiet` - Suppress newline for piping
+
+### Changed
+
+- Entries sorted by favorite first, then by title
+- Permission warning on Unix if vault file is group/other readable (suggests chmod 600)
+
+### Technical
+
+- Added `csv` crate for import/export functionality
+- Migrated `db::migrate` to run-based approach for future migrations
+
 ## 1.0.1 - 2026-04-23
 
 UX and input handling improvements for terminal workflows.

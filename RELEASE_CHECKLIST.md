@@ -1,6 +1,6 @@
-# Sifr v1 Release Checklist
+# Sifr v1.1 Release Checklist
 
-Scope: release the existing functionality only, without schema migrations.
+Scope: export/import, auto-lock, password strength, scrollable help.
 
 ## 1. Release scope is frozen
 
@@ -11,7 +11,10 @@ Scope: release the existing functionality only, without schema migrations.
   - [x] Unlock vault
   - [x] Add/edit/delete/search entries
   - [x] Generate password
-- [x] Schema migration work is explicitly postponed to v1.1+.
+  - [x] Export vault to JSON
+  - [x] Import entries from CSV
+  - [x] Auto-lock after inactivity
+  - [x] Password strength indicator
 
 ## 2. Security and secret handling
 
@@ -37,8 +40,8 @@ Scope: release the existing functionality only, without schema migrations.
 
 ## 5. Packaging and release artifacts
 
-- [x] Version is set to 1.0.0.
-- [x] Tag `v1.0.0` is created from release commit.
+- [x] Version is set to 1.1.0.
+- [x] Tag `v1.1.0` is created from release commit.
 - [ ] GitHub Release is created from tag.
 - [ ] Binaries are attached for:
   - [ ] macOS
