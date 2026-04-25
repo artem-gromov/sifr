@@ -117,3 +117,59 @@ pub fn generate_password(
 
     Zeroizing::new(result.into_iter().collect())
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PasswordStrength {
+    Weak,
+    Medium,
+    Strong,
+}
+
+impl PasswordStrength {
+    pub fn label(&self) -> &'static str {
+        match self {
+            PasswordStrength::Weak => "weak",
+            PasswordStrength::Medium => "medium",
+            PasswordStrength::Strong => "strong",
+        }
+    }
+}
+
+pub fn calculate_password_strength(password: &str) -> PasswordStrength {
+    if password.is_empty() {
+        return PasswordStrength::Weak;
+    }
+
+    let mut pool_size: usize = 0;
+    let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
+    let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
+    let has_digit = password.chars().any(|c| c.is_ascii_digit());
+    let has_symbol = password.chars().any(|c| !c.is_alphanumeric());
+
+    if has_lower {
+        pool_size += 26;
+    }
+    if has_upper {
+        pool_size += 26;
+    }
+    if has_digit {
+        pool_size += 10;
+    }
+    if has_symbol {
+        pool_size += 32;
+    }
+
+    if pool_size == 0 {
+        return PasswordStrength::Weak;
+    }
+
+    let entropy = (password.len() as f64) * (pool_size as f64).log2();
+
+    if entropy < 60.0 {
+        PasswordStrength::Weak
+    } else if entropy < 80.0 {
+        PasswordStrength::Medium
+    } else {
+        PasswordStrength::Strong
+    }
+}

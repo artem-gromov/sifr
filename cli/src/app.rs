@@ -40,6 +40,9 @@ pub struct PickerEntry {
     pub is_vault: bool,
 }
 
+pub const FIELD_INDEX_PASSWORD: usize = 2;
+pub const FIELD_INDEX_NOTES: usize = 5;
+
 pub struct App {
     pub screen: Screen,
     pub running: bool,
@@ -62,6 +65,8 @@ pub struct App {
     pub unlock_mode: UnlockMode,
     pub clipboard_notification: Option<String>,
     pub clipboard_clear_at: Option<std::time::Instant>,
+    pub last_activity_at: Option<std::time::Instant>,
+    pub auto_lock_timeout_secs: u64,
     // Double-click tracking
     pub last_click: Option<(std::time::Instant, u16, u16)>,
     pub column_boundaries: Vec<u16>,
@@ -90,6 +95,10 @@ pub struct App {
     pub form_totp_row: Option<(u16, u16)>,
     // Notes field textarea when editing notes (field index 5)
     pub form_notes_textarea: Option<TextArea<'static>>,
+    // Help screen scroll
+    pub help_scroll_offset: usize,
+    pub help_total_lines: usize,
+    pub help_visible_lines: usize,
 }
 
 impl App {
@@ -117,6 +126,8 @@ impl App {
             unlock_mode: UnlockMode::Open,
             clipboard_notification: None,
             clipboard_clear_at: None,
+            last_activity_at: None,
+            auto_lock_timeout_secs: 300,
             last_click: None,
             column_boundaries: Vec::new(),
             picker_path,
@@ -139,6 +150,9 @@ impl App {
             form_field_rows: Vec::new(),
             form_totp_row: None,
             form_notes_textarea: None,
+            help_scroll_offset: 0,
+            help_total_lines: 0,
+            help_visible_lines: 0,
         };
         app.refresh_picker();
         app
@@ -387,5 +401,44 @@ impl App {
                 zeroize::Zeroize::zeroize(&mut field.value);
             }
         }
+    }
+
+    pub fn lock(&mut self) {
+        self.vault = None;
+        self.entries.clear();
+        self.search_query.clear();
+        self.filtered_indices.clear();
+        *self.password_input = String::new();
+        *self.password_confirm = String::new();
+        self.password_cursor = 0;
+        self.password_confirm_cursor = 0;
+        self.confirm_active = false;
+        self.password_visible = false;
+        self.last_activity_at = None;
+        if self.started_from_picker {
+            self.screen = Screen::VaultPicker;
+        } else {
+            self.screen = Screen::Unlock;
+        }
+    }
+
+    pub fn record_activity(&mut self) {
+        if self.vault.is_some() {
+            self.last_activity_at = Some(std::time::Instant::now());
+        }
+    }
+
+    pub fn check_auto_lock(&mut self) -> bool {
+        if let (Some(last_activity), Some(_vault)) = (self.last_activity_at, &self.vault) {
+            if self.auto_lock_timeout_secs > 0 {
+                let elapsed = std::time::Instant::now().duration_since(last_activity);
+                if elapsed.as_secs() >= self.auto_lock_timeout_secs {
+                    self.lock();
+                    self.set_error("Vault locked due to inactivity");
+                    return true;
+                }
+            }
+        }
+        false
     }
 }

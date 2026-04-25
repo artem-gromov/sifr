@@ -13,13 +13,13 @@ pub enum DbError {
 /// Opens (or creates) an encrypted SQLCipher vault file.
 /// The key is derived externally via `crypto::derive_key` and passed as raw bytes.
 pub fn open(path: &str, key: &Zeroizing<[u8; 32]>) -> Result<Connection, DbError> {
-    let conn = Connection::open(path)?;
+    let mut conn = Connection::open(path)?;
     // cipher_page_size MUST be set before PRAGMA key for SQLCipher
     conn.execute_batch("PRAGMA cipher_page_size = 4096;")?;
     let pragma = hex_key_pragma(key);
     conn.execute_batch(&pragma)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-    migrate(&conn)?;
+    migrate(&mut conn)?;
     Ok(conn)
 }
 
@@ -76,14 +76,31 @@ fn hex_salt_pragma(salt: &[u8; 16]) -> String {
     format!("PRAGMA cipher_salt = \"x'{}'\"", hex)
 }
 
+type Migration = dyn for<'a> Fn(&'a Connection) -> Result<(), DbError> + Send + Sync;
+
+static MIGRATIONS: std::sync::LazyLock<Vec<(i64, &Migration)>> =
+    std::sync::LazyLock::new(|| {
+        vec![
+            (1, &|_| Ok(())),
+        ]
+    });
+
 /// Applies pending schema migrations. Returns Ok if schema not yet initialized.
-pub fn migrate(conn: &Connection) -> Result<(), DbError> {
+/// Each migration runs in its own transaction; partial failures are rolled back.
+pub fn migrate(conn: &mut Connection) -> Result<(), DbError> {
     let current = current_version(conn);
     if current < 1 {
-        return Ok(()); // schema not initialized yet
+        return Ok(());
     }
-    // Future migrations go here:
-    // if current < 2 { ... conn.execute_batch(...)?; set_version(conn, 2)?; }
+    for &(version, migration) in MIGRATIONS.iter() {
+        if current >= version {
+            continue;
+        }
+        let tx = conn.transaction()?;
+        migration(&tx)?;
+        set_version(&tx, version)?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -94,4 +111,12 @@ fn current_version(conn: &Connection) -> i64 {
         |row| row.get(0),
     )
     .unwrap_or(0)
+}
+
+fn set_version(conn: &Connection, version: i64) -> Result<(), DbError> {
+    conn.execute(
+        "INSERT INTO schema_version (version) VALUES (?1)",
+        [version],
+    )?;
+    Ok(())
 }

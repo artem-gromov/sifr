@@ -2,7 +2,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, Table, TableState},
+    widgets::{
+        Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Table, TableState,
+    },
     Frame,
 };
 
@@ -183,6 +186,18 @@ fn draw_table(f: &mut Frame, app: &mut App, area: Rect) {
     let mut state = TableState::default();
     state.select(Some(selected - scroll_offset));
     f.render_stateful_widget(table, area, &mut state);
+
+    let total = entries.len();
+    if total > visible_height {
+        let mut scroll_state = ScrollbarState::new(total).position(selected);
+        f.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .thumb_style(tb.accent())
+                .track_style(tb.muted()),
+            area,
+            &mut scroll_state,
+        );
+    }
 }
 
 fn draw_hints(f: &mut Frame, app: &App, area: Rect) {

@@ -4,7 +4,7 @@ mod input;
 mod theme_bridge;
 mod ui;
 
-use std::io;
+use std::io::{self, Write};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -15,7 +15,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use app::App;
+use app::{App, FIELD_INDEX_NOTES};
 
 #[derive(Parser)]
 #[command(
@@ -54,6 +54,26 @@ enum Commands {
         /// Exclude uppercase letters
         #[arg(long)]
         no_uppercase: bool,
+        /// Suppress newline (quiet output)
+        #[arg(long, short)]
+        quiet: bool,
+    },
+    /// Export vault entries to JSON (outputs to stdout or file with -o)
+    Export {
+        /// Path to the vault file
+        path: String,
+        /// Output file (stdout if omitted)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Import entries from CSV.
+    /// Format: title,username,password,url,notes,totp_secret
+    Import {
+        /// Path to the vault file
+        path: String,
+        /// Input CSV file (stdin if omitted)
+        #[arg(short, long)]
+        input: Option<String>,
     },
 }
 
@@ -98,6 +118,7 @@ fn main() -> Result<()> {
             no_symbols,
             no_numbers,
             no_uppercase,
+            quiet,
         }) => {
             let password = sifr_core::crypto::generate_password(
                 length,
@@ -105,12 +126,73 @@ fn main() -> Result<()> {
                 !no_numbers,
                 !no_symbols,
             );
-            println!("{}", &*password);
+            if quiet {
+                print!("{}", &*password);
+            } else {
+                println!("{}", &*password);
+            }
         }
         None => {
             // Bare `sifr` → last vault if available, otherwise picker
             let last = config::load_last_vault();
             run_tui(last)?;
+        }
+        Some(Commands::Export { path, output }) => {
+            print!("Master password: ");
+            std::io::stdout().flush()?;
+            let password = rpassword::read_password()?;
+            match sifr_core::Vault::open(&path, &password) {
+                Ok(vault) => {
+                    match vault.export_json() {
+                        Ok(json) => {
+                            if let Some(out_path) = output {
+                                std::fs::write(&out_path, &json)?;
+                                println!("Exported to: {}", out_path);
+                            } else {
+                                println!("{}", json);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Export failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to open vault: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Import { path, input }) => {
+            print!("Master password: ");
+            std::io::stdout().flush()?;
+            let password = rpassword::read_password()?;
+            match sifr_core::Vault::open(&path, &password) {
+                Ok(vault) => {
+                    let csv_data = if let Some(input_path) = input {
+                        std::fs::read_to_string(&input_path)?
+                    } else {
+                        use std::io::Read;
+                        let mut buf = String::new();
+                        std::io::stdin().read_to_string(&mut buf)?;
+                        buf
+                    };
+                    match vault.import_csv(&csv_data) {
+                        Ok(count) => {
+                            println!("Imported {} entries.", count);
+                        }
+                        Err(e) => {
+                            eprintln!("Import failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to open vault: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 
@@ -150,6 +232,7 @@ fn run_tui_inner(vault_path: Option<String>, vault: Option<sifr_core::Vault>) ->
         // Pre-opened vault (e.g. from `sifr new`)
         app.vault = Some(v);
         app.refresh_entries();
+        app.record_activity();
         app.screen = app::Screen::EntryList;
     } else if path.is_empty() {
         app.screen = app::Screen::VaultPicker;
@@ -207,6 +290,11 @@ where
                 app.error_message = None;
                 app.error_clear_at = None;
             }
+        }
+
+        // Check auto-lock timer (skip if Notes textarea is active)
+        if app.form_editing_field != Some(FIELD_INDEX_NOTES) {
+            let _ = app.check_auto_lock();
         }
 
         if !app.running {

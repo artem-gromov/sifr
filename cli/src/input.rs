@@ -3,9 +3,9 @@ use ratatui_textarea::{Input as TextAreaInput, Key as TextAreaKey, TextArea};
 use tui_input::Input as TuiInput;
 use tui_input::backend::crossterm::to_input_request;
 
-use crate::app::{App, Screen, UnlockMode};
+use crate::app::{App, FIELD_INDEX_NOTES, Screen, UnlockMode};
 
-const NOTES_FIELD_INDEX: usize = 5;
+const NOTES_FIELD_INDEX: usize = FIELD_INDEX_NOTES;
 
 fn apply_tui_input_to_string(value: &mut String, cursor: &mut usize, key: KeyEvent) -> bool {
     let event = crossterm::event::Event::Key(key);
@@ -40,6 +40,7 @@ fn apply_tui_input_to_secret(
 }
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
+    app.record_activity();
     // Delete confirmation overlay takes priority
     if app.confirm_delete.is_some() {
         handle_confirm_delete(app, key);
@@ -55,6 +56,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
 }
 
 pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
+    app.record_activity();
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.screen {
             Screen::VaultPicker => {
@@ -62,6 +64,9 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             }
             Screen::EntryList if app.selected_index > 0 => {
                 app.selected_index -= 1;
+            }
+            Screen::Help => {
+                app.help_scroll_offset = app.help_scroll_offset.saturating_sub(3);
             }
             _ => {}
         },
@@ -74,6 +79,9 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                 if count > 0 && app.selected_index + 1 < count {
                     app.selected_index += 1;
                 }
+            }
+            Screen::Help => {
+                app.help_scroll_offset = app.help_scroll_offset.saturating_add(3);
             }
             _ => {}
         },
@@ -180,10 +188,6 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                             }
                         }
                     }
-                }
-                Screen::Help => {
-                    // Click outside modal → go back to EntryList
-                    app.screen = Screen::EntryList;
                 }
                 Screen::AddEntry | Screen::EditEntry => {
                     if let Some(area) = app.form_modal_area {
@@ -403,6 +407,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                             app.vault = Some(vault);
                             app.refresh_entries();
                             crate::config::save_last_vault(&path);
+                            app.record_activity();
                             *app.password_input = String::new();
                             *app.password_confirm = String::new();
                             app.password_cursor = 0;
@@ -431,6 +436,7 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
                         app.vault = Some(vault);
                         app.refresh_entries();
                         crate::config::save_last_vault(&path);
+                        app.record_activity();
                         app.screen = Screen::EntryList;
                     }
                     Err(sifr_core::vault::VaultError::WrongPassword) => {
@@ -631,9 +637,19 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_help(app: &mut App, key: KeyEvent) {
+    let max_offset = app
+        .help_total_lines
+        .saturating_sub(app.help_visible_lines);
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
             app.screen = Screen::EntryList;
+            app.help_scroll_offset = 0;
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.help_scroll_offset = app.help_scroll_offset.saturating_add(1).min(max_offset);
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.help_scroll_offset = app.help_scroll_offset.saturating_sub(1);
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.running = false;

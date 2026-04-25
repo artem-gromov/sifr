@@ -150,3 +150,34 @@ pub struct EntryTag {
     pub entry_id: i64,
     pub tag_id: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntryExport {
+    pub title: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub url: Option<String>,
+    pub notes: Option<String>,
+    pub totp_secret: Option<String>,
+    pub category: Option<String>,
+    pub favorite: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl From<&Entry> for EntryExport {
+    fn from(entry: &Entry) -> Self {
+        Self {
+            title: entry.title.clone(),
+            username: entry.username.clone(),
+            password: entry.password.clone(),
+            url: entry.url.clone(),
+            notes: entry.notes.clone(),
+            totp_secret: entry.totp_secret.clone(),
+            category: None,
+            favorite: entry.favorite,
+            created_at: entry.created_at,
+            updated_at: entry.updated_at,
+        }
+    }
+}

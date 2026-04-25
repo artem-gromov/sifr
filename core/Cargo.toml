@@ -13,6 +13,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 rusqlite.workspace = true
+csv = "1.4"
 argon2.workspace = true
 rand.workspace = true
 zeroize.workspace = true

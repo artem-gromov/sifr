@@ -5,8 +5,10 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
+use crate::app::{App, FIELD_INDEX_PASSWORD};
 use crate::ui::format_inline_input;
+
+const PASSWORD_FIELD_INDEX: usize = FIELD_INDEX_PASSWORD;
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let tb = app.theme_bridge();
@@ -84,7 +86,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 height: textarea_height,
             });
         } else if is_editing_this {
-            // Editable input on the same line as the label
             let label_style = tb.accent();
             let box_inner_width = value_width;
             let cursor = app
@@ -96,13 +97,26 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 &field.value,
                 cursor,
                 box_inner_width,
-                field.secret,
+                false,
                 true,
             );
             content.push(Line::from(vec![
                 Span::styled(format!("{:<16}", label_text), label_style),
                 Span::styled(format!("[{}]", padded), label_style),
             ]));
+
+            if i == PASSWORD_FIELD_INDEX && !field.value.is_empty() {
+                let strength = sifr_core::crypto::calculate_password_strength(&field.value);
+                let strength_color = match strength {
+                    sifr_core::crypto::PasswordStrength::Weak => tb.red(),
+                    sifr_core::crypto::PasswordStrength::Medium => tb.yellow(),
+                    sifr_core::crypto::PasswordStrength::Strong => tb.green(),
+                };
+                content.push(Line::from(vec![
+                    Span::styled(format!("{:<16}", ""), label_style),
+                    Span::styled(format!("{:?}", strength), strength_color),
+                ]));
+            }
         } else {
             // Read-only label: value display
             let label_style = if is_focused { tb.accent() } else { tb.muted() };

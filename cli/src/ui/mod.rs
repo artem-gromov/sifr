@@ -7,11 +7,14 @@ pub mod vault_picker;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{
+        Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    },
     Frame,
 };
 
 use crate::app::{App, Screen};
+use crate::theme_bridge::ThemeBridge;
 
 pub fn format_inline_input(
     value: &str,
@@ -88,17 +91,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn draw_help(f: &mut Frame, app: &App) {
-    let tb = app.theme_bridge();
-    let full = f.area();
-
-    let bg = Block::default().style(tb.bg());
-    f.render_widget(bg, full);
-
-    let modal_area = centered_rect_pct(55, 80, full);
-    f.render_widget(Clear, modal_area);
-
-    let content = vec![
+fn build_help_content(tb: &ThemeBridge) -> Vec<Line<'_>> {
+    vec![
         Line::from(""),
         Line::from(Span::styled("  Navigation", tb.accent())),
         Line::from(vec![
@@ -126,7 +120,7 @@ fn draw_help(f: &mut Frame, app: &App) {
         Line::from(""),
         Line::from(Span::styled("  Clipboard (List & Detail)", tb.accent())),
         Line::from(vec![
-            Span::styled("    y / c      ", tb.text()),
+            Span::styled("    y          ", tb.text()),
             Span::styled("Copy password (auto-clears in 30s)", tb.muted()),
         ]),
         Line::from(vec![
@@ -179,7 +173,7 @@ fn draw_help(f: &mut Frame, app: &App) {
         ]),
         Line::from(vec![
             Span::styled("    t          ", tb.text()),
-            Span::styled("Cycle theme", tb.muted()),
+            Span::styled("Copy TOTP code", tb.muted()),
         ]),
         Line::from(vec![
             Span::styled("    ?          ", tb.text()),
@@ -190,9 +184,78 @@ fn draw_help(f: &mut Frame, app: &App) {
             Span::styled("Quit", tb.muted()),
         ]),
         Line::from(""),
-        Line::from(Span::styled("  Press q or ? to close", tb.muted())),
+        Line::from(Span::styled("  CLI Commands", tb.accent())),
+        Line::from(vec![
+            Span::styled("  sifr gen [opts]        ", tb.text()),
+            Span::styled("Generate password", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("  sifr export <vault>     ", tb.text()),
+            Span::styled("Export vault to JSON", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("  sifr import <vault>     ", tb.text()),
+            Span::styled("Import CSV entries", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("    CSV: title,username,password,url,notes,totp_secret", tb.muted()),
+        ]),
         Line::from(""),
-    ];
+        Line::from(Span::styled("  Password strength", tb.accent())),
+        Line::from(vec![
+            Span::styled("  Weak    ", tb.red()),
+            Span::styled(" < 60 bits entropy", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("  Medium  ", tb.yellow()),
+            Span::styled(" 60-80 bits", tb.muted()),
+        ]),
+        Line::from(vec![
+            Span::styled("  Strong  ", tb.green()),
+            Span::styled(" > 80 bits", tb.muted()),
+        ]),
+        Line::from(""),
+    ]
+}
+
+fn draw_help(f: &mut Frame, app: &mut App) {
+    let tb = app.theme_bridge();
+    let full = f.area();
+
+    let bg = Block::default().style(tb.bg());
+    f.render_widget(bg, full);
+
+    let modal_area = centered_rect_pct(55, 80, full);
+    f.render_widget(Clear, modal_area);
+
+    let help_lines = build_help_content(&tb);
+
+    let inner_height = modal_area.height.saturating_sub(2) as usize;
+    let total_lines = help_lines.len();
+    let visible_lines = inner_height.saturating_sub(1);
+    let max_offset = total_lines.saturating_sub(visible_lines);
+
+    app.help_total_lines = total_lines;
+    app.help_visible_lines = visible_lines;
+    app.help_scroll_offset = app.help_scroll_offset.min(max_offset);
+    let scroll_offset = app.help_scroll_offset;
+
+    let visible: Vec<Line> = help_lines
+        .into_iter()
+        .skip(scroll_offset)
+        .take(visible_lines)
+        .collect();
+
+    let content_len = visible.len();
+    let missing = (inner_height.saturating_sub(1)).saturating_sub(content_len);
+    let mut output = visible;
+    for _ in 0..missing {
+        output.push(Line::from(""));
+    }
+    output.push(Line::from(Span::styled(
+        "  j/k scroll \u{2022} q/? close",
+        tb.muted(),
+    )));
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -201,8 +264,20 @@ fn draw_help(f: &mut Frame, app: &App) {
         .title_alignment(Alignment::Center)
         .style(tb.surface());
 
-    let para = Paragraph::new(content).block(block);
+    let para = Paragraph::new(output).block(block);
     f.render_widget(para, modal_area);
+
+    if total_lines > visible_lines {
+        let thumb_range = max_offset.saturating_add(1);
+        let mut scroll_state = ScrollbarState::new(thumb_range).position(scroll_offset);
+        f.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .thumb_style(tb.accent())
+                .track_style(tb.muted()),
+            modal_area,
+            &mut scroll_state,
+        );
+    }
 }
 
 fn draw_delete_confirm(f: &mut Frame, app: &App) {

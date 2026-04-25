@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::crypto;
 use crate::db;
-use crate::models::{Entry, EntryUpdate, NewEntry};
+use crate::models::{Entry, EntryExport, EntryUpdate, NewEntry};
 
 #[derive(Error, Debug)]
 pub enum VaultError {
@@ -73,6 +73,8 @@ impl Vault {
     /// Reads the Argon2id salt from the first 16 bytes of the SQLCipher file header,
     /// re-derives the key, and verifies with a probe query.
     pub fn open(path: &str, master_password: &str) -> Result<Self, VaultError> {
+        Self::check_permissions(path)?;
+
         // Read the salt from the SQLCipher file header (first 16 bytes)
         let salt = Self::read_salt(path)?;
 
@@ -84,6 +86,26 @@ impl Vault {
             .map_err(|_| VaultError::WrongPassword)?;
 
         Ok(Self { conn })
+    }
+
+    #[cfg(unix)]
+    fn check_permissions(path: &str) -> Result<(), VaultError> {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(path)?;
+        let mode = metadata.permissions().mode();
+        let readable_by_group_or_others = mode & 0o077;
+        if readable_by_group_or_others != 0 {
+            eprintln!(
+                "Warning: Vault file '{}' has permissions {:o}. Consider running: chmod 600 '{}'",
+                path, mode, path
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    fn check_permissions(_path: &str) -> Result<(), VaultError> {
+        Ok(())
     }
 
     /// Reads the 16-byte salt from the SQLCipher file header.
@@ -145,12 +167,12 @@ impl Vault {
         Ok(entry)
     }
 
-    /// Returns all entries ordered by title.
+    /// Returns all entries ordered by favorite first, then by title.
     pub fn list_entries(&self) -> Result<Vec<Entry>, VaultError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, title, username, password, url, notes, totp_secret,
                     category_id, favorite, created_at, updated_at
-             FROM entries ORDER BY title ASC",
+             FROM entries ORDER BY favorite DESC, title ASC",
         )?;
         let entries: Result<Vec<Entry>, rusqlite::Error> =
             stmt.query_map([], row_to_entry)?.collect();
@@ -239,6 +261,7 @@ impl Vault {
     }
 
     /// Searches entries whose title, username, url, or notes contain `query` (case-insensitive).
+    /// Results are ordered by favorite first, then by title.
     pub fn search_entries(&self, query: &str) -> Result<Vec<Entry>, VaultError> {
         let escaped: String = query
             .chars()
@@ -255,12 +278,73 @@ impl Vault {
                     category_id, favorite, created_at, updated_at
              FROM entries
              WHERE title LIKE ?1 ESCAPE '\\' OR username LIKE ?1 ESCAPE '\\' OR url LIKE ?1 ESCAPE '\\' OR notes LIKE ?1 ESCAPE '\\'
-             ORDER BY title ASC",
+             ORDER BY favorite DESC, title ASC",
         )?;
         let entries: Result<Vec<Entry>, rusqlite::Error> = stmt
             .query_map(rusqlite::params![pattern], row_to_entry)?
             .collect();
         Ok(entries?)
+    }
+
+    // -------------------------------------------------------------------------
+    // Import / Export
+    // -------------------------------------------------------------------------
+
+    /// Exports all entries as JSON.
+    /// WARNING: passwords and TOTP secrets are included in plaintext.
+    /// Only export to trusted locations.
+    pub fn export_json(&self) -> Result<String, VaultError> {
+        let entries = self.list_entries()?;
+        let exports: Vec<EntryExport> = entries.iter().map(EntryExport::from).collect();
+        let json = serde_json::to_string_pretty(&exports).map_err(|e| VaultError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
+        eprintln!("WARNING: Export contains plaintext passwords and TOTP secrets.");
+        Ok(json)
+    }
+
+    /// Imports entries from CSV. Each row: title,username,password,url,notes,totp_secret,favorite
+    /// Returns the number of entries imported.
+    pub fn import_csv(&self, csv_data: &str) -> Result<usize, VaultError> {
+        let mut count = 0;
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .flexible(true)
+            .from_reader(csv_data.as_bytes());
+        for result in rdr.records() {
+            let record = result.map_err(|e| {
+                VaultError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+            })?;
+            let title = record.get(0).map(|s| s.trim()).unwrap_or("").to_string();
+            if title.is_empty() {
+                continue;
+            }
+            let new = NewEntry {
+                title,
+                username: record.get(1).and_then(|s| {
+                    let s = s.trim();
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                }),
+                password: record.get(2).and_then(|s| {
+                    let s = s.trim();
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                }),
+                url: record.get(3).and_then(|s| {
+                    let s = s.trim();
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                }),
+                notes: record.get(4).and_then(|s| {
+                    let s = s.trim();
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                }),
+                totp_secret: record.get(5).and_then(|s| {
+                    let s = s.trim();
+                    if s.is_empty() { None } else { Some(s.to_string()) }
+                }),
+                category_id: None,
+            };
+            self.add_entry(&new)?;
+            count += 1;
+        }
+        Ok(count)
     }
 }
 
