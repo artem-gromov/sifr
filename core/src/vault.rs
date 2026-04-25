@@ -296,7 +296,8 @@ impl Vault {
     pub fn export_json(&self) -> Result<String, VaultError> {
         let entries = self.list_entries()?;
         let exports: Vec<EntryExport> = entries.iter().map(EntryExport::from).collect();
-        let json = serde_json::to_string_pretty(&exports).map_err(|e| VaultError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
+        let json = serde_json::to_string_pretty(&exports)
+            .map_err(|e| VaultError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
         eprintln!("WARNING: Export contains plaintext passwords and TOTP secrets.");
         Ok(json)
     }
@@ -321,23 +322,43 @@ impl Vault {
                 title,
                 username: record.get(1).and_then(|s| {
                     let s = s.trim();
-                    if s.is_empty() { None } else { Some(s.to_string()) }
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
                 }),
                 password: record.get(2).and_then(|s| {
                     let s = s.trim();
-                    if s.is_empty() { None } else { Some(s.to_string()) }
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
                 }),
                 url: record.get(3).and_then(|s| {
                     let s = s.trim();
-                    if s.is_empty() { None } else { Some(s.to_string()) }
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
                 }),
                 notes: record.get(4).and_then(|s| {
                     let s = s.trim();
-                    if s.is_empty() { None } else { Some(s.to_string()) }
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
                 }),
                 totp_secret: record.get(5).and_then(|s| {
                     let s = s.trim();
-                    if s.is_empty() { None } else { Some(s.to_string()) }
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
                 }),
                 category_id: None,
             };

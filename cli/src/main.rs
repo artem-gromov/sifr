@@ -142,22 +142,20 @@ fn main() -> Result<()> {
             std::io::stdout().flush()?;
             let password = rpassword::read_password()?;
             match sifr_core::Vault::open(&path, &password) {
-                Ok(vault) => {
-                    match vault.export_json() {
-                        Ok(json) => {
-                            if let Some(out_path) = output {
-                                std::fs::write(&out_path, &json)?;
-                                println!("Exported to: {}", out_path);
-                            } else {
-                                println!("{}", json);
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Export failed: {}", e);
-                            std::process::exit(1);
+                Ok(vault) => match vault.export_json() {
+                    Ok(json) => {
+                        if let Some(out_path) = output {
+                            std::fs::write(&out_path, &json)?;
+                            println!("Exported to: {}", out_path);
+                        } else {
+                            println!("{}", json);
                         }
                     }
-                }
+                    Err(e) => {
+                        eprintln!("Export failed: {}", e);
+                        std::process::exit(1);
+                    }
+                },
                 Err(e) => {
                     eprintln!("Failed to open vault: {}", e);
                     std::process::exit(1);

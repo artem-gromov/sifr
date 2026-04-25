@@ -1,9 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui_textarea::{Input as TextAreaInput, Key as TextAreaKey, TextArea};
-use tui_input::Input as TuiInput;
 use tui_input::backend::crossterm::to_input_request;
+use tui_input::Input as TuiInput;
 
-use crate::app::{App, FIELD_INDEX_NOTES, Screen, UnlockMode};
+use crate::app::{App, Screen, UnlockMode, FIELD_INDEX_NOTES};
 
 const NOTES_FIELD_INDEX: usize = FIELD_INDEX_NOTES;
 
@@ -215,16 +215,15 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                 .unwrap_or(false);
 
                             let now = std::time::Instant::now();
-                            let is_double =
-                                if let Some((last_time, last_col, last_row)) = app.last_click {
-                                    now.duration_since(last_time).as_millis() < 500
-                                        && last_row == mouse.row
-                                        && (last_col as i32 - mouse.column as i32)
-                                            .unsigned_abs()
-                                            < 5
-                                } else {
-                                    false
-                                };
+                            let is_double = if let Some((last_time, last_col, last_row)) =
+                                app.last_click
+                            {
+                                now.duration_since(last_time).as_millis() < 500
+                                    && last_row == mouse.row
+                                    && (last_col as i32 - mouse.column as i32).unsigned_abs() < 5
+                            } else {
+                                false
+                            };
 
                             if let Some(field_idx) = clicked_field {
                                 app.form_focused = field_idx;
@@ -238,8 +237,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                     }
                                     app.last_click = None;
                                 } else {
-                                    app.last_click =
-                                        Some((now, mouse.column, mouse.row));
+                                    app.last_click = Some((now, mouse.column, mouse.row));
                                 }
                             } else if clicked_totp {
                                 if is_double {
@@ -258,8 +256,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                                     }
                                     app.last_click = None;
                                 } else {
-                                    app.last_click =
-                                        Some((now, mouse.column, mouse.row));
+                                    app.last_click = Some((now, mouse.column, mouse.row));
                                 }
                             }
                         }
@@ -481,7 +478,11 @@ fn handle_unlock(app: &mut App, key: KeyEvent) {
     }
 
     let changed = if app.unlock_mode == UnlockMode::Create && app.confirm_active {
-        apply_tui_input_to_secret(&mut app.password_confirm, &mut app.password_confirm_cursor, key)
+        apply_tui_input_to_secret(
+            &mut app.password_confirm,
+            &mut app.password_confirm_cursor,
+            key,
+        )
     } else {
         apply_tui_input_to_secret(&mut app.password_input, &mut app.password_cursor, key)
     };
@@ -637,9 +638,7 @@ fn handle_entry_list(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_help(app: &mut App, key: KeyEvent) {
-    let max_offset = app
-        .help_total_lines
-        .saturating_sub(app.help_visible_lines);
+    let max_offset = app.help_total_lines.saturating_sub(app.help_visible_lines);
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
             app.screen = Screen::EntryList;

@@ -21,8 +21,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     // Modal sizing: clamp to viewport so resizing cannot push content outside frame.
     let modal_width = 64u16.min(full.width.saturating_sub(2).max(1));
-    let modal_height = (if is_add { 32u16 } else { 30u16 })
-        .min(full.height.saturating_sub(2).max(1));
+    let modal_height =
+        (if is_add { 32u16 } else { 30u16 }).min(full.height.saturating_sub(2).max(1));
     let area = super::centered_rect(modal_width, modal_height, full);
     app.form_modal_area = Some(area);
     f.render_widget(Clear, area);
@@ -93,13 +93,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .get(i)
                 .copied()
                 .unwrap_or_else(|| field.value.chars().count());
-            let padded = format_inline_input(
-                &field.value,
-                cursor,
-                box_inner_width,
-                false,
-                true,
-            );
+            let padded = format_inline_input(&field.value, cursor, box_inner_width, false, true);
             content.push(Line::from(vec![
                 Span::styled(format!("{:<16}", label_text), label_style),
                 Span::styled(format!("[{}]", padded), label_style),
@@ -176,7 +170,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
         // Show generated TOTP code right after Password when not editing password
         if field.label == "Password" && !is_editing_this {
-            let totp_secret = app.form_fields.get(3).map(|f| f.value.as_str()).unwrap_or("");
+            let totp_secret = app
+                .form_fields
+                .get(3)
+                .map(|f| f.value.as_str())
+                .unwrap_or("");
             if !totp_secret.is_empty() {
                 if let Ok((code, remaining)) = sifr_core::crypto::generate_totp(totp_secret) {
                     let totp_row_start = content_start_y + content.len() as u16;
@@ -186,7 +184,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                         Span::styled(format!("{} {}", &code[..3], &code[3..]), tb.text()),
                         Span::styled(format!(" {:2}s", remaining), secs_style),
                     ]));
-                    app.form_totp_row = Some((totp_row_start, content_start_y + content.len() as u16));
+                    app.form_totp_row =
+                        Some((totp_row_start, content_start_y + content.len() as u16));
                 }
             }
         }

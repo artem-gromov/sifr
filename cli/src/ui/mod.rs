@@ -7,9 +7,7 @@ pub mod vault_picker;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
-    },
+    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Frame,
 };
 
@@ -197,9 +195,10 @@ fn build_help_content(tb: &ThemeBridge) -> Vec<Line<'_>> {
             Span::styled("  sifr import <vault>     ", tb.text()),
             Span::styled("Import CSV entries", tb.muted()),
         ]),
-        Line::from(vec![
-            Span::styled("    CSV: title,username,password,url,notes,totp_secret", tb.muted()),
-        ]),
+        Line::from(vec![Span::styled(
+            "    CSV: title,username,password,url,notes,totp_secret",
+            tb.muted(),
+        )]),
         Line::from(""),
         Line::from(Span::styled("  Password strength", tb.accent())),
         Line::from(vec![

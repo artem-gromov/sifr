@@ -79,11 +79,7 @@ fn hex_salt_pragma(salt: &[u8; 16]) -> String {
 type Migration = dyn for<'a> Fn(&'a Connection) -> Result<(), DbError> + Send + Sync;
 
 static MIGRATIONS: std::sync::LazyLock<Vec<(i64, &Migration)>> =
-    std::sync::LazyLock::new(|| {
-        vec![
-            (1, &|_| Ok(())),
-        ]
-    });
+    std::sync::LazyLock::new(|| vec![(1, &|_| Ok(()))]);
 
 /// Applies pending schema migrations. Returns Ok if schema not yet initialized.
 /// Each migration runs in its own transaction; partial failures are rolled back.
