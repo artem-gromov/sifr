@@ -17,9 +17,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     let is_add = app.form_editing_id.is_none();
 
-    // Modal sizing: 64 wide, height adapts
-    let modal_width = 64u16;
-    let modal_height = if is_add { 32u16 } else { 30u16 };
+    // Modal sizing: clamp to viewport so resizing cannot push content outside frame.
+    let modal_width = 64u16.min(full.width.saturating_sub(2).max(1));
+    let modal_height = (if is_add { 32u16 } else { 30u16 })
+        .min(full.height.saturating_sub(2).max(1));
     let area = super::centered_rect(modal_width, modal_height, full);
     app.form_modal_area = Some(area);
     f.render_widget(Clear, area);
@@ -215,8 +216,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         )));
     }
 
-    // Pad content to push hints to bottom of modal
-    let inner_height = (modal_height - 2) as usize; // subtract top/bottom border
+    // Pad content to push hints to bottom of the *actual* rendered modal.
+    let inner_height = area.height.saturating_sub(2) as usize; // subtract top/bottom border
     let editing = app.form_editing_field.is_some();
     let hint_line = if editing {
         Line::from(vec![
@@ -245,7 +246,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Span::styled(" close", tb.muted()),
         ])
     };
-    while content.len() < inner_height.saturating_sub(1) {
+    let body_capacity = inner_height.saturating_sub(1);
+    if content.len() > body_capacity {
+        content.truncate(body_capacity);
+    }
+    while content.len() < body_capacity {
         content.push(Line::from(""));
     }
     content.push(hint_line);
